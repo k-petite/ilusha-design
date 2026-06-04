@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -18,8 +17,7 @@
     projectId: "ilusha-design",
     storageBucket: "ilusha-design.firebasestorage.app",
     messagingSenderId: "668121580005",
-    appId: "1:668121580005:web:0d702c91ed059164f4af0c",
-    measurementId: "G-0HELQ31XQQ"
+    appId: "1:668121580005:web:0d702c91ed059164f4af0c"
   };
   const app = initializeApp(firebaseConfig);
   const db  = getDatabase(app);
@@ -32,50 +30,66 @@
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const { useState, useEffect, useRef } = React;
+const { useState, useEffect, useRef, useMemo } = React;
 
-const IS_VIEWER = window.location.search.includes("view") || window.location.hash.includes("view");
-const DB_KEY    = "ilusha-design-2026";
-const TOTAL     = 3500000;
-const ROUGH     = 1407526;
-const SAFETY    = 500000;
+// ── CONSTANTS ──
+const IS_VIEWER  = window.location.search.includes("view") || window.location.hash.includes("view");
+const DB_KEY     = "ilusha-design-2026";
+const ROUGH      = 1407526;
+const BASE_RESERVE = 500000;
 
-const STATUS = {
-  planned:  { label:"Запланировано", dot:"#B8A878", bg:"#F5F0E4" },
-  selected: { label:"Подобрано",     dot:"#5A9AB8", bg:"#E6F1F8" },
-  paid:     { label:"Оплачено",      dot:"#4A9A5A", bg:"#E6F5EA" },
-};
+const STATUSES = [
+  { id:"none",      label:"Не искал",   color:"#9A8A72", bg:"#F5F0E8" },
+  { id:"looking",   label:"Ищу",        color:"#5A9AB8", bg:"#E6F1F8" },
+  { id:"selected",  label:"Выбрано",    color:"#C8A97E", bg:"#FDF5E4" },
+  { id:"paid",      label:"Куплено",    color:"#4A9A5A", bg:"#E6F5EA" },
+  { id:"delivered", label:"Доставлено", color:"#7A6AB8", bg:"#EEE8F8" },
+  { id:"installed", label:"Смонтировано",color:"#2A6A2A",bg:"#D4F0D4" },
+];
+const STATUS_MAP = Object.fromEntries(STATUSES.map(s=>[s.id,s]));
+
+const ROOMS = [
+  { id:"common",    label:"Вся квартира", icon:"🏠" },
+  { id:"entry",     label:"Прихожая",    icon:"🚪" },
+  { id:"living",    label:"Гостиная",    icon:"🛋️" },
+  { id:"bedroom",   label:"Спальня",     icon:"🛏️" },
+  { id:"kitchen",   label:"Кухня",       icon:"🍳" },
+  { id:"bathroom",  label:"Санузел",     icon:"🚿" },
+  { id:"wardrobe",  label:"Гардеробная", icon:"👗" },
+  { id:"balcony",   label:"Балкон",      icon:"🌿" },
+];
+const ROOM_MAP = Object.fromEntries(ROOMS.map(r=>[r.id,r]));
 
 const uid = () => Math.random().toString(36).slice(2);
-const mk  = (name, planned=0) => ({
+const mk = (name, planned=0) => ({
   id:uid(), name, planned, selected:0, paid:0,
-  url:"", imageUrl:"", imageData:"", comment:"", alts:[]
+  status:"none", roomIds:[], url:"", imageUrl:"", imageData:"", comment:"", alts:[]
 });
 
 const DEFAULT_CATS = [
-  { id:"finish",     name:"Чистовая отделка",    icon:"🪣", color:"#8DB5C8", budget:420000,
+  { id:"finish",     name:"Чистовая отделка",    icon:"🪣", color:"#8DB5C8",
     subs:[ mk("Инженерная доска / паркет",254900), mk("Керамогранит",127600),
            mk("Краска (стены + потолок)",59100), mk("Декоративная штукатурка",9400),
            mk("Плинтусы",13700), mk("Затирка и лак",3000), mk("Доставка материалов",20300) ] },
-  { id:"furniture",  name:"Мебель",               icon:"🛋️", color:"#B8A3C8", budget:266000,
+  { id:"furniture",  name:"Мебель",               icon:"🛋️", color:"#B8A3C8",
     subs:[ mk("Диван",100000), mk("Матрас",65000), mk("Тумба под TV",14400),
            mk("Барная стойка (на заказ)",60900), mk("Стулья барные (×2)",0),
            mk("Журнальный столик",29100), mk("Полка для обуви + вешалка",7300), mk("Сборка и доставка",14200) ] },
-  { id:"kitchen",    name:"Кухня на заказ",        icon:"🍳", color:"#A3C8B8", budget:456474,
+  { id:"kitchen",    name:"Кухня на заказ",        icon:"🍳", color:"#A3C8B8",
     subs:[ mk("Корпусная кухня (на заказ)",316800), mk("Столешница искусственный камень",134500),
            mk("Смеситель кухонный",11300), mk("Диспенсер + арматура мойки",9300),
            mk("Монтаж и доставка кухни",28100) ] },
-  { id:"appliances", name:"Бытовая техника",       icon:"📺", color:"#C8C0A3", budget:180000,
+  { id:"appliances", name:"Бытовая техника",       icon:"📺", color:"#C8C0A3",
     subs:[ mk("Телевизор 70\"",39400), mk("Холодильник встраиваемый",35100),
            mk("Стиральная машина",30500), mk("Духовой шкаф",44100), mk("Варочная панель",8000),
            mk("Чайник + тостер",21200), mk("Умные колонки (×2)",24600),
            mk("Пылесос + отпариватель",3300), mk("Роутер Wi-Fi",2700) ] },
-  { id:"lighting",   name:"Свет и электрика",      icon:"💡", color:"#D4C87E", budget:150000,
+  { id:"lighting",   name:"Свет и электрика",      icon:"💡", color:"#D4C87E",
     subs:[ mk("Светильники потолочные (с/у, кухня, коридор)",53500),
            mk("Светильники встраиваемые (гостиная)",30800), mk("Светодиодная лента RGB",32900),
            mk("Розетки и выключатели Donel R98",25300), mk("Торшер напольный",0),
            mk("Лампы настольные",30500), mk("Доставка",900) ] },
-  { id:"decor",      name:"Декор, текстиль, С/У",  icon:"🪞", color:"#C8A97E", budget:120000,
+  { id:"decor",      name:"Декор, текстиль, С/У",  icon:"🪞", color:"#C8A97E",
     subs:[ mk("Ванна",16000), mk("Унитаз + инсталляция",13900),
            mk("Раковина + столешница С/У",9100), mk("Смесители С/У",6300),
            mk("Полотенцесушитель + аксессуары С/У",3700), mk("Климат-контроль",18300),
@@ -87,19 +101,53 @@ const DEFAULT_CATS = [
 
 const ROUGH_GROUPS = [
   { g:"Демонтаж",    items:[{n:"Стены и отделка",a:118500},{n:"Полы",a:18900},{n:"Потолки",a:9900},{n:"Окна и двери",a:3000},{n:"Электрика",a:3680},{n:"Сантехника",a:4350}] },
-  { g:"Стены",       items:[{n:"Штукатурка гипс (105 м²)",a:89250},{n:"Штукатурка ЦПС (20 м²)",a:19000},{n:"Перегородки ПГП (12 м²)",a:12000},{n:"Шпатлёвка базовая",a:47250},{n:"Шлифовка + грунтовка",a:47350},{n:"Окраска стен",a:45150},{n:"Обои под окраску",a:73500},{n:"Прочие стены",a:51920}] },
+  { g:"Стены",       items:[{n:"Штукатурка гипс (105 м²)",a:89250},{n:"Штукатурка ЦПС (20 м²)",a:19000},{n:"Перегородки ПГП",a:12000},{n:"Шпатлёвка базовая",a:47250},{n:"Шлифовка + грунтовка",a:47350},{n:"Окраска стен",a:45150},{n:"Обои под окраску",a:73500},{n:"Прочие стены",a:51920}] },
   { g:"Полы",        items:[{n:"Полусухая стяжка (33 м²)",a:46200},{n:"Керамзит + армирование",a:16500},{n:"Укладка покрытия (30 м²)",a:18000},{n:"Плинтусы + окраска",a:27880},{n:"Прочее",a:17700}] },
-  { g:"Потолки",     items:[{n:"Натяжной потолок с нишами (33 м²)",a:100000,note:"⚠ уточнить у подрядчика"}] },
-  { g:"Электрика",   items:[{n:"Разводка кабелей (250 п.м.)",a:37500},{n:"Щит + автоматы + КУП",a:28880},{n:"Подрозетники + штрабы",a:38630},{n:"Розетки + выключатели (49 шт)",a:24450},{n:"Прочая электрика",a:26250}] },
-  { g:"Сантехника",  items:[{n:"Трубы и коллекторы",a:19700},{n:"Инсталляция унитаза",a:5500},{n:"Водорозетки (11 шт)",a:30800},{n:"Вентиляция",a:16200},{n:"Установка сантехники",a:38710},{n:"Гидроизоляция + герметик",a:9140},{n:"Прочая сантехника",a:38160}] },
+  { g:"Потолки",     items:[{n:"Натяжной потолок с нишами (33 м²)",a:100000,note:"⚠ уточнить"}] },
+  { g:"Электрика",   items:[{n:"Разводка кабелей",a:37500},{n:"Щит + автоматы + КУП",a:28880},{n:"Подрозетники + штрабы",a:38630},{n:"Розетки + выключатели",a:24450},{n:"Прочая электрика",a:26250}] },
+  { g:"Сантехника",  items:[{n:"Трубы и коллекторы",a:19700},{n:"Инсталляция унитаза",a:5500},{n:"Водорозетки",a:30800},{n:"Вентиляция",a:16200},{n:"Установка сантехники",a:38710},{n:"Гидроизоляция",a:9140},{n:"Прочая сантехника",a:38160}] },
   { g:"Плитка",      items:[{n:"Мелкоформатная (10 м²)",a:65000},{n:"Крупноформатная (13 м²)",a:52000},{n:"Затирка (23 м²)",a:6900},{n:"Резка + откосы",a:24060}] },
   { g:"Окна и двери",items:[{n:"Откосы + подоконники",a:26600}] },
   { g:"Прочее",      items:[{n:"Укрывные работы + уборка",a:30300}] },
 ];
 
-const fmt  = n => n===0 ? "—" : new Intl.NumberFormat("ru-RU",{maximumFractionDigits:0}).format(Math.round(n))+" ₽";
-const fmtK = n => n<=0 ? "—" : (n>=1e6?(n/1e6).toFixed(1)+"М":Math.round(n/1e3)+"К")+" ₽";
-const pct  = (a,b) => b===0 ? 0 : Math.min(100,Math.round(a/b*100));
+// ── HELPERS ──
+const fmt  = n => n===0?"—":new Intl.NumberFormat("ru-RU",{maximumFractionDigits:0}).format(Math.round(n))+" ₽";
+const fmtK = n => n<=0?"—":(n>=1e6?(n/1e6).toFixed(1)+"М":Math.round(n/1e3)+"К")+" ₽";
+const pct  = (a,b) => b===0?0:Math.min(100,Math.round(a/b*100));
+
+// ── DERIVED CALCS ──
+
+// actualCost per sub: paid > selected > planned
+const actual = s => {
+  if(!s) return 0;
+  if(s.paid && s.paid>0) return s.paid;
+  if(s.selected && s.selected>0) return s.selected;
+  return s.planned||0;
+};
+
+function calcCat(cat) {
+  const subs = cat.subs||[];
+  const planned    = subs.reduce((s,x)=>s+(+x.planned||0), 0);
+  const selected   = subs.reduce((s,x)=>s+(+x.selected||0), 0);
+  const paid       = subs.reduce((s,x)=>s+(+x.paid||0), 0);
+  const actualSum  = subs.reduce((s,x)=>s+actual(x), 0);
+  const delta      = actualSum - planned;
+  return { planned, selected, paid, actualSum, delta };
+}
+
+function calcProject(cats) {
+  if(!cats||!cats.length) return { planned:0, selected:0, paid:0, actualSum:0, reserve:BASE_RESERVE, savings:0, overruns:0 };
+  const allSubs   = cats.flatMap(c=>c.subs||[]);
+  const planned   = allSubs.reduce((s,x)=>s+(+x.planned||0), 0);
+  const selected  = allSubs.reduce((s,x)=>s+(+x.selected||0), 0);
+  const paid      = allSubs.reduce((s,x)=>s+(+x.paid||0), 0);
+  const actualSum = allSubs.reduce((s,x)=>s+actual(x), 0);
+  const reserve   = BASE_RESERVE + allSubs.reduce((s,x)=>s+(+x.planned||0)-actual(x), 0);
+  const savings   = allSubs.reduce((s,x)=>s+Math.max(0,(+x.planned||0)-actual(x)), 0);
+  const overruns  = allSubs.reduce((s,x)=>s+Math.max(0,actual(x)-(+x.planned||0)), 0);
+  return { planned, selected, paid, actualSum, reserve, savings, overruns };
+}
 
 // ── IMAGE PICKER ──
 function ImagePicker({imageUrl,imageData,onChange}){
@@ -125,12 +173,12 @@ function ImagePicker({imageUrl,imageData,onChange}){
             border:drag?"2px dashed #C8A97E":"2px dashed #DDD5C4",
             background:drag?"#FDF5E4":"#FDFAF6",display:"flex",alignItems:"center",
             justifyContent:"center",overflow:"hidden",position:"relative"}}>
-          {src ? <>
+          {src?<>
             <img src={src} alt="" style={{width:"100%",height:"100%",objectFit:"contain",background:"#F9F6F1"}}/>
             <button onClick={e=>{e.stopPropagation();onChange({imageData:"",imageUrl:""}); }}
               style={{position:"absolute",top:3,right:3,background:"rgba(44,36,22,.7)",border:"none",
                 borderRadius:"50%",width:18,height:18,cursor:"pointer",color:"white",fontSize:10}}>✕</button>
-          </> : <div style={{textAlign:"center",padding:6}}>
+          </>:<div style={{textAlign:"center",padding:6}}>
             <div style={{fontSize:18}}>📎</div>
             <div style={{fontFamily:"'DM Mono',monospace",fontSize:8,color:"#9A8A72",lineHeight:1.3}}>клик/тащи<br/>Ctrl+V</div>
           </div>}
@@ -142,7 +190,7 @@ function ImagePicker({imageUrl,imageData,onChange}){
             onChange={e=>onChange({imageUrl:e.target.value,imageData:""})}
             style={{width:"100%",fontFamily:"'DM Mono',monospace",fontSize:11,padding:"4px 7px",
               border:"1px solid #DDD5C4",borderRadius:3,background:"#FDFAF6"}}/>
-          {!src && <div style={{fontFamily:"'DM Mono',monospace",fontSize:9,color:"#AAA",marginTop:4,lineHeight:1.4}}>
+          {!src&&<div style={{fontFamily:"'DM Mono',monospace",fontSize:9,color:"#AAA",marginTop:4,lineHeight:1.4}}>
             Скопируй картинку → кликни квадрат → Ctrl+V
           </div>}
         </div>
@@ -151,20 +199,91 @@ function ImagePicker({imageUrl,imageData,onChange}){
   );
 }
 
+// ── DIFF BADGE — shows delta vs planned using actualCost ──
+function DiffBadge({sub}){
+  if(!sub) return null;
+  const a = actual(sub);
+  // only show diff if something is filled in beyond planned
+  if(!sub.selected && !sub.paid) return null;
+  const diff = a - (sub.planned||0);
+  if(diff===0) return null;
+  const over = diff > 0;
+  return(
+    <span style={{fontFamily:"'DM Mono',monospace",fontSize:10,padding:"1px 7px",borderRadius:8,
+      background:over?"#FAE0D4":"#D4F0D4",color:over?"#8A2A1A":"#1A6A1A",flexShrink:0}}>
+      {over?"🔴 +":"🟢 "}{fmt(Math.abs(diff))}
+    </span>
+  );
+}
+
+// ── STATUS PILL ──
+function StatusPill({value, onChange}){
+  const s = STATUS_MAP[value] || STATUS_MAP.none;
+  if(IS_VIEWER) return(
+    <span style={{fontFamily:"'DM Mono',monospace",fontSize:10,padding:"2px 8px",borderRadius:8,
+      background:s.bg,color:s.color}}>{s.label}</span>
+  );
+  return(
+    <select value={value} onChange={e=>onChange(e.target.value)}
+      style={{fontFamily:"'DM Mono',monospace",fontSize:10,padding:"2px 6px",borderRadius:8,
+        border:"1px solid #DDD5C4",background:s.bg,color:s.color,cursor:"pointer"}}>
+      {STATUSES.map(st=>(
+        <option key={st.id} value={st.id}>{st.label}</option>
+      ))}
+    </select>
+  );
+}
+
+// ── ROOM PICKER ──
+function RoomPicker({roomIds, onChange}){
+  const ids = roomIds||[];
+  const toggle = id => {
+    if(id==="common"){
+      // if selecting "whole apartment", clear others
+      onChange(ids.includes("common")?[]:["common"]);
+      return;
+    }
+    const next = ids.includes(id) ? ids.filter(r=>r!==id) : [...ids.filter(r=>r!=="common"),id];
+    onChange(next);
+  };
+  return(
+    <div>
+      <div style={{fontFamily:"'DM Mono',monospace",fontSize:9,color:"#9A8A72",marginBottom:6}}>ПОМЕЩЕНИЯ</div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+        {ROOMS.map(r=>{
+          const active=ids.includes(r.id);
+          return(
+            <button key={r.id} onClick={()=>toggle(r.id)}
+              style={{background:active?"#2C2416":"none",color:active?"#F7F4EF":"#7A6A52",
+                border:"1px solid",borderColor:active?"#2C2416":"#DDD5C4",
+                padding:"3px 9px",borderRadius:12,cursor:"pointer",
+                fontFamily:"'DM Mono',monospace",fontSize:10,transition:"all .15s"}}>
+              {r.icon} {r.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── MAIN APP ──
 function App(){
-  const [cats,setCats]         = useState(null);
-  const [tab,setTab]           = useState("overview");
-  const [openCats,setOpenCats] = useState({});
-  const [openSubs,setOpenSubs] = useState({});
-  const [openRough,setOpenRough]=useState({});
-  const [altModal,setAltModal] = useState(null);
-  const [newAlt,setNewAlt]     = useState({name:"",url:"",imageUrl:"",imageData:"",price:"",comment:""});
+  const [cats,setCats]           = useState(null);
+  const [tab,setTab]             = useState("overview");
+  const [openCats,setOpenCats]   = useState({});
+  const [openSubs,setOpenSubs]   = useState({});
+  const [openRough,setOpenRough] = useState({});
+  const [altModal,setAltModal]   = useState(null);
+  const [newAlt,setNewAlt]       = useState({name:"",url:"",imageUrl:"",imageData:"",price:"",comment:""});
   const [newCatModal,setNewCatModal]=useState(false);
-  const [newCat,setNewCat]     = useState({name:"",icon:"📦",budget:""});
+  const [newCat,setNewCat]       = useState({name:"",icon:"📦"});
+  const [filterRoom,setFilterRoom]   = useState("all");
+  const [filterStatus,setFilterStatus]=useState("all");
+  const [filterCat,setFilterCat]     = useState("all");
   const [saveStatus,setSaveStatus]=useState(null);
-  const [lastSync,setLastSync] = useState(null);
-  const [fbReady,setFbReady]   = useState(!!window._fb);
+  const [lastSync,setLastSync]   = useState(null);
+  const [fbReady,setFbReady]     = useState(!!window._fb);
   const [exportModal,setExportModal]=useState(false);
   const [exportText,setExportText]  =useState("");
   const saveTimer=useRef(null);
@@ -181,9 +300,28 @@ function App(){
     if(!fbReady)return;
     const {db,ref,onValue}=window._fb;
     const unsub=onValue(ref(db,DB_KEY),snap=>{
-      const val=snap.val();
-      if(val && val.cats){ setCats(val.cats); }
-      else { setCats(DEFAULT_CATS); }
+      try {
+        const val=snap.val();
+        if(val&&val.cats){
+          // Migrate: add missing fields to old data
+          const migrated = val.cats.map(cat=>({
+            ...cat,
+            subs: (cat.subs||[]).map(sub=>({
+              planned:0, selected:0, paid:0,
+              status:"none", roomIds:[], url:"", imageUrl:"", imageData:"", comment:"", alts:[],
+              ...sub,
+              roomIds: sub.roomIds||[],
+              alts: sub.alts||[],
+            }))
+          }));
+          setCats(migrated);
+        } else {
+          setCats(DEFAULT_CATS);
+        }
+      } catch(e) {
+        console.error("Load error:", e);
+        setCats(DEFAULT_CATS);
+      }
       setLastSync(new Date());
       setSaveStatus("saved");
       setTimeout(()=>setSaveStatus(null),2000);
@@ -207,8 +345,7 @@ function App(){
 
   const handleExport=()=>{
     if(!cats)return;
-    const data={cats,exportedAt:new Date().toISOString(),version:"ilusha-design-2026"};
-    setExportText(JSON.stringify(data,null,2));
+    setExportText(JSON.stringify({cats,exportedAt:new Date().toISOString(),version:"ilusha-design-2026"},null,2));
     setExportModal(true);
   };
 
@@ -238,44 +375,29 @@ function App(){
     </div>
   );
 
-  // ── COMPUTED ──
-  const flexTotal    = cats.reduce((s,c)=>s+c.budget,0);
-  const allocated    = ROUGH+flexTotal;
-  const reserve      = TOTAL+SAFETY-allocated; // динамический резерв
-  const overBudget   = allocated > TOTAL+SAFETY;
-  const totalPlanned = cats.flatMap(c=>c.subs).reduce((s,x)=>s+x.planned,0);
-  const totalSel     = cats.flatMap(c=>c.subs).reduce((s,x)=>s+x.selected,0);
-  const totalPaid    = cats.flatMap(c=>c.subs).reduce((s,x)=>s+x.paid,0);
-  const maxBar       = Math.max(...cats.map(c=>c.budget),ROUGH);
+  // ── DERIVED STATE ──
+  const proj = useMemo(()=>calcProject(cats),[cats]);
 
-  // updSub: when "planned" changes, auto-update category budget to match sum of all planned
-  const updSub=(cid,sid,patch)=>{
-    setCats(p=>p.map(c=>{
-      if(c.id!==cid) return c;
-      const newSubs = c.subs.map(s=>{
-        if(s.id!==sid) return s;
-        const updated = {...s,...patch};
-        // Floor: planned can't go below selected
-        if(patch.planned !== undefined){
-          updated.planned = Math.max(updated.selected||0, +patch.planned||0);
-        }
-        return updated;
+  // ── FILTER LOGIC ──
+  const filteredCats = useMemo(()=>{
+    return cats.map(cat=>{
+      if(filterCat!=="all" && cat.id!==filterCat) return null;
+      const filteredSubs = cat.subs.filter(sub=>{
+        const roomOk = filterRoom==="all" ||
+          (sub.roomIds||[]).includes(filterRoom) ||
+          (filterRoom==="common" && (sub.roomIds||[]).includes("common"));
+        const statusOk = filterStatus==="all" || (sub.status||"none")===filterStatus;
+        return roomOk && statusOk;
       });
-      // Auto-sync budget = sum of all planned (if any planned > 0)
-      const sumPlanned = newSubs.reduce((s,x)=>s+(x.planned||0),0);
-      const newBudget = sumPlanned > 0 ? sumPlanned : c.budget;
-      return {...c, subs:newSubs, budget:newBudget};
-    }));
-  };
+      if(filteredSubs.length===0 && (filterRoom!=="all"||filterStatus!=="all")) return null;
+      return {...cat, subs:filteredSubs};
+    }).filter(Boolean);
+  },[cats, filterCat, filterRoom, filterStatus]);
 
-  const handleCatBudget=(catId,newVal)=>{
-    const cat=cats.find(c=>c.id===catId);
-    const floor=cat.subs.reduce((s,x)=>s+x.selected,0);
-    const clamped=Math.max(floor,+newVal);
-    const diff=clamped-cat.budget;
-    if(reserve-diff<0)return; // can't exceed 4M
-    setCats(p=>p.map(c=>c.id!==catId?c:{...c,budget:clamped}));
-  };
+  const isFiltered = filterRoom!=="all" || filterStatus!=="all" || filterCat!=="all";
+
+  const updSub=(cid,sid,patch)=>
+    setCats(p=>p.map(c=>c.id!==cid?c:{...c,subs:c.subs.map(s=>s.id!==sid?s:{...s,...patch})}));
 
   const addAlt=()=>{
     if(!altModal||!newAlt.name)return;
@@ -284,105 +406,96 @@ function App(){
     updSub(catId,subId,{alts:[...(sub.alts||[]),{id:uid(),...newAlt}]});
     setNewAlt({name:"",url:"",imageUrl:"",imageData:"",price:"",comment:""});
   };
-
   const removeAlt=(cid,sid,aid)=>{
     const sub=cats.find(c=>c.id===cid).subs.find(s=>s.id===sid);
     updSub(cid,sid,{alts:sub.alts.filter(a=>a.id!==aid)});
   };
 
-  // ── STYLE HELPERS ──
   const M={fontFamily:"'DM Mono',monospace"};
   const card={background:"white",borderRadius:8,padding:"14px 16px",marginBottom:12,boxShadow:"0 1px 5px rgba(44,36,22,.07)"};
-  const barBg={height:5,background:"#EDE7DC",borderRadius:3,overflow:"hidden"};
 
   return(
   <div style={{fontFamily:"'Cormorant Garamond',Georgia,serif",background:"#F7F4EF",minHeight:"100vh",color:"#2C2416",zoom:1.4}}>
   <style>{`
     *{box-sizing:border-box;}
-    input,textarea{font-family:'DM Mono',monospace;font-size:11px;color:#2C2416;background:#FDFAF6;border:1px solid #DDD5C4;border-radius:3px;padding:4px 7px;}
-    input:focus,textarea:focus{outline:none;border-color:#C8A97E;background:white;}
-    input[type=number]{width:90px;text-align:right;}
-    input[type=range]{-webkit-appearance:none;width:100%;height:2px;background:#DDD5C4;border-radius:2px;outline:none;cursor:pointer;}
-    input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;cursor:pointer;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.2);}
+    input[type=text],input[type=number],textarea,select{font-family:'DM Mono',monospace;font-size:11px;color:#2C2416;background:#FDFAF6;border:1px solid #DDD5C4;border-radius:3px;padding:4px 7px;}
+    input:focus,textarea:focus,select:focus{outline:none;border-color:#C8A97E;background:white;}
+    input[type=number]{width:100px;text-align:right;}
     .tab{background:none;border:none;padding:9px 13px;cursor:pointer;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.09em;color:#9A8A72;border-bottom:2px solid transparent;transition:all .2s;white-space:nowrap;}
     .tab.on{color:#F7F4EF;border-bottom-color:#C8A97E;}
     .tab:hover:not(.on){color:#C8B89A;}
     .exp-btn{background:none;border:none;cursor:pointer;font-family:'DM Mono',monospace;font-size:10px;color:#C8A97E;display:flex;align-items:center;gap:5px;padding:0;}
     .exp-btn:hover{opacity:.7;}
-    .sub-sep{border-bottom:1px solid #F5F0E8;padding:12px 0;}
+    .sub-sep{border-bottom:1px solid #F5F0E8;padding:14px 0;}
     .sub-sep:last-child{border-bottom:none;}
     .ghost-btn{background:none;border:1px dashed #C8B89A;color:#9A8A72;padding:4px 10px;border-radius:4px;cursor:pointer;font-family:'DM Mono',monospace;font-size:10px;}
     .ghost-btn:hover{border-color:#C8A97E;color:#C8A97E;}
     .icon-btn{background:none;border:none;cursor:pointer;font-size:14px;padding:2px 4px;border-radius:3px;}
     .icon-btn:hover{background:#F0EAE0;}
     .overlay{position:fixed;inset:0;background:rgba(44,36,22,.5);z-index:100;display:flex;align-items:center;justify-content:center;padding:16px;}
-    .modal{background:white;border-radius:10px;padding:22px;width:100%;max-width:420px;max-height:90vh;overflow-y:auto;}
+    .modal{background:white;border-radius:10px;padding:22px;width:100%;max-width:440px;max-height:90vh;overflow-y:auto;}
     .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-family:'DM Mono',monospace;font-size:10px;}
   `}</style>
 
-  {/* HEADER */}
+  {/* ── HEADER ── */}
   <div style={{background:"#2C2416",color:"#F7F4EF",padding:"22px 18px 0"}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
       <div style={{...M,fontSize:9,letterSpacing:".18em",color:"#C8A97E"}}>БЮДЖЕТ РЕМОНТА</div>
       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
-        {saveStatus==="saving"&&<div style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#FDF5E4",color:"#8A6A12"}}>сохраняю…</div>}
-        {saveStatus==="saved"&&<div style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#E6F5EA",color:"#2A6A2A"}}>✓ сохранено</div>}
-        {saveStatus==="error"&&<div style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#FAE0D4",color:"#8A2A1A"}}>⚠ ошибка</div>}
+        {saveStatus==="saving"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#FDF5E4",color:"#8A6A12"}}>сохраняю…</span>}
+        {saveStatus==="saved"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#E6F5EA",color:"#2A6A2A"}}>✓ сохранено</span>}
+        {saveStatus==="error"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#FAE0D4",color:"#8A2A1A"}}>⚠ ошибка</span>}
         {IS_VIEWER
-          ? <><div style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#E6F1F8",color:"#1A5A7A"}}>👁 просмотр</div>
-              {lastSync&&<div style={{...M,fontSize:9,color:"#6A5A42"}}>{lastSync.toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})}</div>}
-              <button onClick={()=>window.location.reload()} style={{background:"none",border:"1px solid #4A6A7A",color:"#8ABACA",padding:"5px 12px",borderRadius:4,cursor:"pointer",...M,fontSize:10}}>↻</button>
+          ? <><span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#E6F1F8",color:"#1A5A7A"}}>👁 просмотр</span>
+              {lastSync&&<span style={{...M,fontSize:9,color:"#6A5A42"}}>{lastSync.toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})}</span>}
+              <button onClick={()=>window.location.reload()} style={{background:"none",border:"1px solid #4A6A7A",color:"#8ABACA",padding:"5px 10px",borderRadius:4,cursor:"pointer",...M,fontSize:10}}>↻</button>
             </>
-          : <><button onClick={handleExport} style={{background:"none",border:"1px solid #4A6A5A",color:"#8ACAAA",padding:"5px 12px",borderRadius:4,cursor:"pointer",...M,fontSize:10}}>↓ экспорт</button>
-              <button onClick={()=>importRef.current.click()} style={{background:"none",border:"1px solid #4A5A6A",color:"#8AAACA",padding:"5px 12px",borderRadius:4,cursor:"pointer",...M,fontSize:10}}>↑ импорт</button>
+          : <><button onClick={handleExport} style={{background:"none",border:"1px solid #4A6A5A",color:"#8ACAAA",padding:"5px 10px",borderRadius:4,cursor:"pointer",...M,fontSize:10}}>↓ экспорт</button>
+              <button onClick={()=>importRef.current.click()} style={{background:"none",border:"1px solid #4A5A6A",color:"#8AAACA",padding:"5px 10px",borderRadius:4,cursor:"pointer",...M,fontSize:10}}>↑ импорт</button>
               <input ref={importRef} type="file" accept=".json" style={{display:"none"}} onChange={handleImport}/>
             </>
         }
       </div>
     </div>
-    <h1 style={{fontWeight:300,fontSize:22,marginBottom:14}}>Ilusha Design 2026</h1>
+    <h1 style={{fontWeight:300,fontSize:22,marginBottom:16}}>Ilusha Design 2026</h1>
 
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,marginBottom:14}}>
+    {/* 4 main cards */}
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,marginBottom:14}}>
       {[
-        {l:"БЮДЖЕТ",        v:fmt(TOTAL)},
-        {l:"РАСПРЕДЕЛЕНО",  v:fmt(allocated), warn:overBudget},
-        {l:overBudget?"ПРЕВЫШЕНИЕ":"ДО МАКСИМУМА", v:fmt(Math.abs(TOTAL+SAFETY-allocated)), warn:overBudget},
-        {l:"РЕЗЕРВ 🛡",     v:fmt(reserve), warn:reserve<50000, ok:reserve>200000},
+        {l:"ЗАПЛАНИРОВАНО",  v:fmtK(proj.planned),   sub:`черновые +${fmtK(ROUGH)}`, c:"#F7F4EF"},
+        {l:"ФАКТИЧЕСКИ",     v:fmtK(proj.actualSum), sub:proj.selected>0?"подобрано/оплачено":"\u00A0", c:"#F7F4EF"},
+        {l:"ОПЛАЧЕНО",       v:fmtK(proj.paid),      sub:proj.paid>0?`из ${fmtK(proj.actualSum)}`:"\u00A0", c:"#F7F4EF"},
+        {l:"РЕЗЕРВ 🛡",      v:fmtK(proj.reserve),
+          sub:proj.reserve<BASE_RESERVE?`−${fmtK(BASE_RESERVE-proj.reserve)} перерасход`:
+              proj.reserve>BASE_RESERVE?`+${fmtK(proj.reserve-BASE_RESERVE)} экономия`:"\u00A0",
+          c:proj.reserve<50000?"#F0A070":proj.reserve>BASE_RESERVE?"#90D4A0":"#F7F4EF"},
       ].map(s=>(
         <div key={s.l}>
-          <div style={{...M,fontSize:9,letterSpacing:".12em",color:"#8A7A62",marginBottom:3}}>{s.l}</div>
-          <div style={{fontSize:15,fontWeight:300,color:s.warn?"#F0A070":s.ok?"#90D4A0":"#F7F4EF"}}>{s.v}</div>
+          <div style={{...M,fontSize:9,letterSpacing:".1em",color:"#8A7A62",marginBottom:4}}>{s.l}</div>
+          <div style={{fontSize:16,fontWeight:300,color:s.c}}>{s.v}</div>
+          <div style={{...M,fontSize:9,color:"#6A5A42",marginTop:2}}>{s.sub}</div>
         </div>
       ))}
     </div>
 
+    {/* savings / overruns row */}
+    {(proj.savings>0||proj.overruns>0)&&(
+      <div style={{display:"flex",gap:16,marginBottom:10,...M,fontSize:10}}>
+        {proj.savings>0&&<span style={{color:"#90D4A0"}}>🟢 Экономия: {fmt(proj.savings)}</span>}
+        {proj.overruns>0&&<span style={{color:"#F0A070"}}>🔴 Перерасход: {fmt(proj.overruns)}</span>}
+      </div>
+    )}
+
+    {/* Progress bar */}
     <div style={{height:4,background:"#3C3426",borderRadius:2,overflow:"hidden",marginBottom:4}}>
       <div style={{display:"flex",height:"100%"}}>
-        <div style={{width:`${pct(ROUGH,TOTAL)}%`,background:"#C8A97E"}}/>
-        <div style={{width:`${pct(flexTotal,TOTAL)}%`,background:"#8DB5C8"}}/>
-        <div style={{width:`${pct(reserve,TOTAL)}%`,background:"#A3B899"}}/>
+        <div style={{width:`${pct(ROUGH,ROUGH+proj.planned)}%`,background:"#C8A97E",transition:"width .4s"}}/>
+        <div style={{width:`${pct(proj.paid,ROUGH+proj.planned)}%`,background:"#4A9A5A",transition:"width .4s"}}/>
+        <div style={{width:`${pct(Math.max(0,proj.actualSum-proj.paid),ROUGH+proj.planned)}%`,background:"#8DB5C8",transition:"width .4s"}}/>
       </div>
     </div>
-    <div style={{...M,display:"flex",gap:12,fontSize:9,color:"#6A5A42",flexWrap:"wrap",paddingBottom:3}}>
-      <span>▪ Черновые {pct(ROUGH,TOTAL)}%</span>
-      <span>▪ Категории {pct(flexTotal,TOTAL)}%</span>
-      <span>▪ Резерв {pct(reserve,TOTAL)}%</span>
-    </div>
-
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,background:"#1E1810",borderRadius:6,padding:"10px 14px",margin:"12px 0 0"}}>
-      {[
-        {l:"ЗАПЛАНИРОВАНО",v:totalPlanned, c:STATUS.planned.dot},
-        {l:"ПОДОБРАНО",    v:totalSel,     c:STATUS.selected.dot},
-        {l:"ОПЛАЧЕНО",     v:totalPaid,    c:STATUS.paid.dot},
-      ].map(s=>(
-        <div key={s.l}>
-          <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:3}}>
-            <div style={{width:6,height:6,borderRadius:"50%",background:s.c,flexShrink:0}}/>
-            <span style={{...M,fontSize:9,color:"#8A7A62"}}>{s.l}</span>
-          </div>
-          <div style={{...M,fontSize:13,color:"#F7F4EF"}}>{s.v>0?fmtK(s.v):"—"}</div>
-        </div>
-      ))}
+    <div style={{...M,display:"flex",gap:14,fontSize:9,color:"#6A5A42",paddingBottom:3}}>
+      <span>▪ Черновые</span><span>▪ Оплачено</span><span>▪ Подобрано</span>
     </div>
 
     <div style={{display:"flex",borderTop:"1px solid #3C3426",marginTop:14,overflowX:"auto"}}>
@@ -392,74 +505,73 @@ function App(){
     </div>
   </div>
 
-  {/* CONTENT */}
+  {/* ── CONTENT ── */}
   <div style={{padding:"14px 14px 48px"}}>
 
   {/* OVERVIEW */}
-  {tab==="overview" && (
+  {tab==="overview"&&(
     <div>
       <div style={card}>
         <div style={{...M,fontSize:10,color:"#9A8A72",letterSpacing:".1em",marginBottom:12}}>СТРУКТУРА БЮДЖЕТА</div>
         {[
-          {name:"Черновые работы", amount:ROUGH,    color:"#C8A97E", note:"А4РЕМОНТ — зафиксировано", fixed:true},
-          ...cats.map(c=>({name:c.icon+" "+c.name,  amount:c.budget, color:c.color})),
-          {name:"🛡 Резервный фонд",amount:reserve,  color:"#A3B899", note:"подушка безопасности", fixed:true},
+          {name:"Черновые работы",   planned:ROUGH,        selected:0, color:"#C8A97E", note:"А4РЕМОНТ — зафиксировано", fixed:true},
+          ...cats.map(c=>{const cc=calcCat(c);return{name:c.icon+" "+c.name,planned:cc.planned,actualSum:cc.actualSum,paid:cc.paid,delta:cc.delta,color:c.color};}),
         ].map((item,i)=>(
-          <div key={i} style={{padding:"9px 0",borderBottom:"1px solid #F5F0E8"}}>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+          <div key={i} style={{padding:"10px 0",borderBottom:"1px solid #F5F0E8"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:5}}>
               <div>
                 <span style={{fontSize:14}}>{item.name}</span>
                 {item.fixed&&<span className="badge" style={{background:"#EDE7DC",color:"#7A6A52",marginLeft:7}}>фикс</span>}
                 {item.note&&<div style={{...M,fontSize:10,color:"#9A8A72",marginTop:1}}>{item.note}</div>}
               </div>
-              <div style={{textAlign:"right"}}>
-                <div style={{...M,fontSize:13}}>{fmt(item.amount)}</div>
-                <div style={{...M,fontSize:10,color:"#9A8A72"}}>{pct(item.amount,TOTAL)}%</div>
+              <div style={{textAlign:"right",display:"flex",flexDirection:"column",gap:2,alignItems:"flex-end"}}>
+                <div style={{...M,fontSize:13}}>{fmt(item.planned)}</div>
+                {item.actualSum!==item.planned&&item.actualSum>0&&<div style={{...M,fontSize:11,color:"#5A9AB8"}}>фактически {fmt(item.actualSum)}</div>}
+                {item.delta!==0&&item.delta!==undefined&&item.actualSum!==item.planned&&<span style={{fontFamily:"'DM Mono',monospace",fontSize:10,padding:"1px 7px",borderRadius:8,background:item.delta>0?"#FAE0D4":"#D4F0D4",color:item.delta>0?"#8A2A1A":"#1A6A1A",flexShrink:0}}>{item.delta>0?"🔴 +":"🟢 "}{fmt(Math.abs(item.delta))}</span>}
               </div>
             </div>
-            <div style={barBg}><div style={{height:"100%",borderRadius:3,transition:"width .4s",width:`${(item.amount/maxBar)*100}%`,background:item.color}}/></div>
+            <div style={{height:5,background:"#EDE7DC",borderRadius:3,overflow:"hidden"}}>
+              <div style={{display:"flex",height:"100%"}}>
+                {item.paid>0&&<div style={{width:`${pct(item.paid,item.planned||1)}%`,background:"#4A9A5A",transition:"width .4s"}}/>}
+                {item.selected>item.paid&&<div style={{width:`${pct(Math.min(item.selected,item.planned)-item.paid,item.planned||1)}%`,background:item.color,transition:"width .4s"}}/>}
+              </div>
+            </div>
           </div>
         ))}
-        <div style={{paddingTop:10,display:"flex",justifyContent:"space-between"}}>
-          <span style={{fontSize:14}}>Итого распределено</span>
-          <span style={{...M,fontSize:14,color:overBudget?"#C05030":"#2A6A2A"}}>{fmt(allocated)}</span>
+      </div>
+
+      {/* Reserve card */}
+      <div style={{...card,border:`2px solid ${proj.reserve<50000?"#E8937A":proj.reserve>BASE_RESERVE?"#A3C8A8":"#A3B899"}`,background:proj.reserve<50000?"#FEF0EC":proj.reserve>BASE_RESERVE?"#F0F8F0":"#F2F8F3"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+          <div>
+            <div style={{...M,fontSize:10,letterSpacing:".1em",color:"#3A7A4A",marginBottom:4}}>🛡 РЕЗЕРВНЫЙ ФОНД</div>
+            <div style={{fontSize:28,fontWeight:300,color:proj.reserve<50000?"#C05030":proj.reserve>BASE_RESERVE?"#1A6A1A":"#2A5A32"}}>{fmt(proj.reserve)}</div>
+            <div style={{...M,fontSize:10,color:"#5A8A6A",marginTop:3}}>базовый {fmt(BASE_RESERVE)}</div>
+          </div>
+          <div style={{textAlign:"right"}}>
+            {proj.savings>0&&<div style={{...M,fontSize:11,color:"#1A6A1A",marginBottom:4}}>+{fmt(proj.savings)} экономия</div>}
+            {proj.overruns>0&&<div style={{...M,fontSize:11,color:"#8A2A1A"}}>−{fmt(proj.overruns)} перерасход</div>}
+          </div>
+        </div>
+        <div style={{height:8,background:"#C8E8CC",borderRadius:4,overflow:"hidden"}}>
+          <div style={{width:`${Math.min(100,pct(proj.reserve,BASE_RESERVE*1.5))}%`,height:"100%",
+            background:proj.reserve<50000?"#E8937A":proj.reserve>BASE_RESERVE?"#4A9A5A":"#4A9A5A",borderRadius:4,transition:"width .5s"}}/>
         </div>
       </div>
 
       <div style={{...card,background:"#FDF5E4",border:"1px solid #E8D8A0"}}>
         <div style={{...M,fontSize:10,color:"#7A5A12",marginBottom:8}}>⚠ КЛЮЧЕВЫЕ МОМЕНТЫ</div>
         <ul style={{paddingLeft:16,fontSize:13,lineHeight:1.9,color:"#5A4A22"}}>
-          <li>Потолки — заложено <b>100 000 ₽</b> в черновой смете ⚠ уточнить у подрядчика</li>
-          <li>Черновые = <b>{pct(ROUGH,TOTAL)}%</b> бюджета</li>
-          <li>Подушка безопасности: <b>500 000 ₽</b> сверх основного бюджета (макс. <b>{fmt(TOTAL+SAFETY)}</b>)</li>
+          <li>Потолки — заложено <b>100 000 ₽</b> в черновой. ⚠ Уточнить у подрядчика</li>
+          <li>Резерв пополняется автоматически при экономии и уменьшается при перерасходе</li>
+          <li>Базовая подушка безопасности: <b>{fmt(BASE_RESERVE)}</b></li>
         </ul>
-      </div>
-
-      <div style={{...card,border:"2px solid #A3B899",background:"#F2F8F3"}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
-          <div>
-            <div style={{...M,fontSize:10,letterSpacing:".1em",color:"#3A7A4A",marginBottom:4}}>🛡 РЕЗЕРВ (подушка)</div>
-            <div style={{fontSize:26,fontWeight:300,color:reserve<50000?"#C05030":reserve<150000?"#8A6A12":"#2A5A32"}}>{fmt(reserve)}</div>
-            <div style={{...M,fontSize:10,color:"#5A8A6A",marginTop:2}}>из {fmt(SAFETY)} максимальной подушки</div>
-          </div>
-          <div style={{textAlign:"right"}}>
-            <div style={{...M,fontSize:10,color:"#5A8A6A",marginBottom:4}}>ПОТОЛОК</div>
-            <div style={{...M,fontSize:13,color:"#3A7A4A"}}>{fmt(TOTAL+SAFETY)}</div>
-          </div>
-        </div>
-        <div style={{height:8,background:"#C8E8CC",borderRadius:4,overflow:"hidden"}}>
-          <div style={{width:`${pct(allocated,TOTAL+SAFETY)}%`,height:"100%",
-            background:allocated>TOTAL?"#E8937A":"#4A9A5A",borderRadius:4,transition:"width .5s"}}/>
-        </div>
-        <div style={{...M,fontSize:10,color:"#5A8A6A",marginTop:6,textAlign:"right"}}>
-          использовано {fmt(allocated)} из {fmt(TOTAL+SAFETY)} ({pct(allocated,TOTAL+SAFETY)}%)
-        </div>
       </div>
     </div>
   )}
 
   {/* ROUGH */}
-  {tab==="rough" && (
+  {tab==="rough"&&(
     <div>
       {ROUGH_GROUPS.map(group=>{
         const total=group.items.reduce((s,i)=>s+i.a,0);
@@ -474,12 +586,14 @@ function App(){
               </button>
               <span style={{...M,fontSize:13}}>{total===0?"—":fmt(total)}</span>
             </div>
-            <div style={{...barBg,marginTop:7}}><div style={{height:"100%",borderRadius:3,width:`${(total/385420)*100}%`,background:"#C8A97E"}}/></div>
+            <div style={{height:4,background:"#EDE7DC",borderRadius:3,overflow:"hidden",marginTop:6}}>
+              <div style={{height:"100%",borderRadius:3,width:`${(total/385420)*100}%`,background:"#C8A97E"}}/>
+            </div>
             {isOpen&&(
               <div style={{marginTop:10,paddingTop:10,borderTop:"1px solid #F5F0E8"}}>
                 {group.items.map(item=>(
                   <div key={item.n} style={{padding:"7px 0",borderBottom:"1px solid #F9F5F0"}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <div style={{display:"flex",justifyContent:"space-between"}}>
                       <span style={{fontSize:13,color:"#4A3A22"}}>{item.n}{item.note&&<span style={{...M,fontSize:10,color:"#C8A050",marginLeft:6}}>{item.note}</span>}</span>
                       <span style={{...M,fontSize:12}}>{item.a===0?"—":fmt(item.a)}</span>
                     </div>
@@ -500,21 +614,75 @@ function App(){
   )}
 
   {/* FLEXIBLE */}
-  {tab==="flexible" && (
+  {tab==="flexible"&&(
     <div>
       <div style={{...M,fontSize:10,color:"#9A8A72",marginBottom:10}}>
-        {IS_VIEWER?"ПРОСМОТР":"КАТЕГОРИИ — автосохранение в Firebase"}
+        {IS_VIEWER?"ПРОСМОТР — только чтение":"КАТЕГОРИИ — вноси суммы по подкатегориям"}
       </div>
-      {cats.map(cat=>{
+
+      {/* FILTER BAR */}
+      <div style={{background:"white",borderRadius:8,padding:"12px 14px",marginBottom:12,boxShadow:"0 1px 5px rgba(44,36,22,.07)"}}>
+        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:10}}>
+          <span style={{...M,fontSize:10,color:"#9A8A72",flexShrink:0}}>ПОМЕЩЕНИЕ:</span>
+          <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+            {[{id:"all",label:"Все",icon:""},...ROOMS].map(r=>(
+              <button key={r.id} onClick={()=>setFilterRoom(r.id)}
+                style={{background:filterRoom===r.id?"#2C2416":"none",
+                  color:filterRoom===r.id?"#F7F4EF":"#7A6A52",
+                  border:"1px solid",borderColor:filterRoom===r.id?"#2C2416":"#DDD5C4",
+                  padding:"3px 9px",borderRadius:12,cursor:"pointer",...M,fontSize:10,transition:"all .15s"}}>
+                {r.icon} {r.label||"Все"}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:10}}>
+          <span style={{...M,fontSize:10,color:"#9A8A72",flexShrink:0}}>СТАТУС:</span>
+          <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+            {[{id:"all",label:"Все",color:"#9A8A72",bg:"#F5F0E8"},...STATUSES].map(s=>(
+              <button key={s.id} onClick={()=>setFilterStatus(s.id)}
+                style={{background:filterStatus===s.id?s.color:"none",
+                  color:filterStatus===s.id?"white":s.color,
+                  border:`1px solid ${filterStatus===s.id?s.color:"#DDD5C4"}`,
+                  padding:"3px 9px",borderRadius:12,cursor:"pointer",...M,fontSize:10,transition:"all .15s"}}>
+                {s.label||"Все"}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+          <span style={{...M,fontSize:10,color:"#9A8A72",flexShrink:0}}>КАТЕГОРИЯ:</span>
+          <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+            {[{id:"all",name:"Все",icon:""},...cats].map(c=>(
+              <button key={c.id} onClick={()=>setFilterCat(c.id)}
+                style={{background:filterCat===c.id?"#2C2416":"none",
+                  color:filterCat===c.id?"#F7F4EF":"#7A6A52",
+                  border:"1px solid",borderColor:filterCat===c.id?"#2C2416":"#DDD5C4",
+                  padding:"3px 9px",borderRadius:12,cursor:"pointer",...M,fontSize:10,transition:"all .15s"}}>
+                {c.icon} {c.name||"Все"}
+              </button>
+            ))}
+          </div>
+        </div>
+        {isFiltered&&(
+          <button onClick={()=>{setFilterRoom("all");setFilterStatus("all");setFilterCat("all");}}
+            style={{marginTop:10,background:"none",border:"none",cursor:"pointer",...M,fontSize:10,color:"#C8A97E",padding:0}}>
+            ✕ сбросить фильтры
+          </button>
+        )}
+      </div>
+
+      {filteredCats.length===0&&<div style={{...card,...M,fontSize:13,color:"#9A8A72",textAlign:"center",padding:24}}>
+        Нет позиций, соответствующих фильтрам
+      </div>}
+
+      {filteredCats.map(cat=>{
         const isCatOpen=openCats[cat.id];
-        const catPl=cat.subs.reduce((s,x)=>s+x.planned,0);
-        const catSel=cat.subs.reduce((s,x)=>s+x.selected,0);
-        const catPd=cat.subs.reduce((s,x)=>s+x.paid,0);
-        const floor=catSel;
-        const maxSlider=Math.min(800000,cat.budget+reserve);
+        const cc=calcCat(cat);
         return(
           <div key={cat.id} style={card}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+            {/* Cat header */}
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
               <button className="exp-btn" onClick={()=>setOpenCats(p=>({...p,[cat.id]:!p[cat.id]}))}>
                 <span style={{fontSize:13}}>{isCatOpen?"▾":"▸"}</span>
                 <span style={{fontSize:16}}>{cat.icon}</span>
@@ -524,55 +692,42 @@ function App(){
                 {!IS_VIEWER&&<button className="icon-btn" title="Удалить"
                   onClick={()=>{if(window.confirm(`Удалить "${cat.name}"?`))setCats(p=>p.filter(c=>c.id!==cat.id));}}
                   style={{fontSize:12,color:"#C8A0A0",opacity:.6}}>🗑</button>}
-                <div style={{textAlign:"right"}}>
-                  <div style={{...M,fontSize:13}}>{fmt(cat.budget)}</div>
-                  <div style={{display:"flex",gap:4,justifyContent:"flex-end",alignItems:"center",marginTop:2}}>
-                    {floor>0&&<span title={"🔒 подобрано "+fmt(floor)} style={{fontSize:11,cursor:"help"}}>🔒</span>}
-                    <div style={{...M,fontSize:10,color:"#9A8A72"}}>{pct(cat.budget,TOTAL)}%</div>
-                  </div>
-                </div>
               </div>
             </div>
-            {!IS_VIEWER&&<>
-              <input type="range" min={floor} max={maxSlider} step={5000} value={cat.budget}
-                onChange={e=>handleCatBudget(cat.id,e.target.value)}
-                style={{accentColor:cat.color,marginBottom:4}}/>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                {catPl>0
-                  ? <span style={{...M,fontSize:10,color:"#8DB5C8"}}>
-                      📋 лимит = сумма запланированного
-                    </span>
-                  : <span/>
-                }
-                <span style={{...M,fontSize:10,color:reserve<50000?"#C05030":reserve<150000?"#8A6A12":"#4A7A4A"}}>
-                  🛡 резерв: {fmt(reserve)}
-                </span>
-              </div>
-            </>}
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:isCatOpen?12:0}}>
-              {[{l:"Запланировано",v:catPl,s:STATUS.planned},{l:"Подобрано",v:catSel,s:STATUS.selected},{l:"Оплачено",v:catPd,s:STATUS.paid}].map(x=>(
-                <div key={x.l} style={{background:x.s.bg,borderRadius:5,padding:"6px 8px"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:2}}>
-                    <div style={{width:6,height:6,borderRadius:"50%",background:x.s.dot,flexShrink:0}}/>
-                    <span style={{...M,fontSize:9,color:"#7A6A52"}}>{x.l}</span>
-                  </div>
-                  <div style={{...M,fontSize:12}}>{x.v>0?fmtK(x.v):"—"}</div>
+
+            {/* Cat totals row */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6,marginBottom:isCatOpen?12:0}}>
+              {[
+                {l:"Запланировано", v:cc.planned,    bg:"#F5F0E4", c:"#7A6A52"},
+                {l:"Фактически",   v:cc.actualSum,  bg:"#E6F1F8", c:"#5A9AB8"},
+                {l:"Оплачено",     v:cc.paid,        bg:"#E6F5EA", c:"#4A9A5A"},
+                {l:"Разница",      v:cc.delta,       bg:cc.delta>0?"#FAE0D4":cc.delta<0?"#D4F0D4":"#F5F0E4",
+                  c:cc.delta>0?"#8A2A1A":cc.delta<0?"#1A6A1A":"#9A8A72",
+                  label:cc.delta>0?"🔴 "+fmt(cc.delta):cc.delta<0?"🟢 "+fmt(Math.abs(cc.delta)):"—"},
+              ].map(x=>(
+                <div key={x.l} style={{background:x.bg,borderRadius:5,padding:"6px 8px"}}>
+                  <div style={{...M,fontSize:9,color:"#7A6A52",marginBottom:2}}>{x.l}</div>
+                  <div style={{...M,fontSize:12,color:x.c}}>{x.label!==undefined?x.label:x.v>0?fmtK(x.v):"—"}</div>
                 </div>
               ))}
             </div>
 
+            {/* Subcategories */}
             {isCatOpen&&(
               <div style={{borderTop:"1px solid #F0EAE0",paddingTop:12}}>
                 {cat.subs.map(sub=>{
                   const isSubOpen=openSubs[sub.id];
                   const subSrc=sub.imageData||sub.imageUrl||null;
+                  const st=STATUS_MAP[sub.status||"none"];
                   return(
                     <div key={sub.id} className="sub-sep">
+                      {/* Sub header */}
                       <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
                         <button className="exp-btn" style={{marginTop:3,flexShrink:0}}
                           onClick={()=>setOpenSubs(p=>({...p,[sub.id]:!p[sub.id]}))}>
                           <span style={{fontSize:11}}>{isSubOpen?"▾":"▸"}</span>
                         </button>
+                        {/* Thumbnail */}
                         {subSrc
                           ? <img src={subSrc} alt="" style={{width:48,height:48,objectFit:"contain",background:"#F9F6F1",borderRadius:6,border:"1px solid #EDE7DC",flexShrink:0,cursor:sub.url?"pointer":"default"}}
                               onClick={()=>sub.url&&window.open(sub.url,"_blank")} onError={e=>e.target.style.display="none"}/>
@@ -585,14 +740,16 @@ function App(){
                             </div>
                         }
                         <div style={{flex:1,minWidth:0}}>
-                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6,flexWrap:"wrap"}}>
                             {!IS_VIEWER&&isSubOpen
                               ? <input type="text" value={sub.name} onChange={e=>updSub(cat.id,sub.id,{name:e.target.value})}
                                   style={{fontSize:14,fontFamily:"'Cormorant Garamond',serif",border:"none",
-                                    borderBottom:"1px solid #C8A97E",background:"transparent",padding:"0 0 2px",width:"100%",color:"#2C2416"}}/>
+                                    borderBottom:"1px solid #C8A97E",background:"transparent",padding:"0 0 2px",flex:1,color:"#2C2416"}}/>
                               : <span style={{fontSize:14,lineHeight:1.3}}>{sub.name}</span>
                             }
-                            <div style={{display:"flex",gap:4,alignItems:"center",flexShrink:0}}>
+                            <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0,flexWrap:"wrap"}}>
+                              <StatusPill value={sub.status||"none"} onChange={v=>updSub(cat.id,sub.id,{status:v})}/>
+                              <DiffBadge sub={sub}/>
                               {sub.alts&&sub.alts.length>0&&<span className="badge" style={{background:"#EDE7DC",color:"#7A6A52"}}>{sub.alts.length} альт.</span>}
                               {!IS_VIEWER&&<button className="icon-btn" title="Удалить"
                                 onClick={e=>{e.stopPropagation();if(window.confirm(`Удалить "${sub.name}"?`))setCats(p=>p.map(c=>c.id!==cat.id?c:{...c,subs:c.subs.filter(s=>s.id!==sub.id)}));}}
@@ -600,56 +757,90 @@ function App(){
                             </div>
                           </div>
                           {sub.url&&<a href={sub.url} target="_blank" rel="noreferrer"
-                            style={{fontSize:11,...M,color:"#8DB5C8",display:"block",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:200}}>
+                            style={{fontSize:11,...M,color:"#8DB5C8",display:"block",marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:240}}>
                             🔗 {sub.url.replace(/^https?:\/\/(www\.)?/,"")}
                           </a>}
-                          {sub.comment&&<div style={{fontSize:12,color:"#7A6A52",marginTop:2,fontStyle:"italic"}}>{sub.comment}</div>}
+                          {sub.comment&&<div style={{fontSize:12,color:"#7A6A52",marginTop:3,fontStyle:"italic"}}>{sub.comment}</div>}
+                          {/* Compact amounts when collapsed */}
+                          {!isSubOpen&&(sub.planned>0||sub.selected>0)&&(
+                            <div style={{display:"flex",gap:12,marginTop:5,...M,fontSize:11,color:"#7A6A52",flexWrap:"wrap"}}>
+                              {sub.planned>0&&<span>план: {fmt(sub.planned)}</span>}
+                              {sub.selected>0&&<span style={{color:"#5A9AB8"}}>подобрано: {fmt(sub.selected)}</span>}
+                              {sub.paid>0&&<span style={{color:"#4A9A5A"}}>оплачено: {fmt(sub.paid)}</span>}
+                            </div>
+                          )}
+                          {/* Room tags (always visible) */}
+                          {(sub.roomIds||[]).length>0&&(
+                            <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:5}}>
+                              {(sub.roomIds||[]).map(rid=>{
+                                const r=ROOM_MAP[rid];
+                                return r?<span key={rid} style={{...M,fontSize:9,padding:"2px 7px",borderRadius:10,background:"#EDE7DC",color:"#5A4A32"}}>{r.icon} {r.label}</span>:null;
+                              })}
+                            </div>
+                          )}
                         </div>
                       </div>
 
+                      {/* Expanded sub */}
                       {isSubOpen&&(
-                        <div style={{marginTop:12,paddingLeft:20}}>
-                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}>
-                            {["planned","selected","paid"].map(field=>(
+                        <div style={{marginTop:14,paddingLeft:20}}>
+                          {/* Three amount fields */}
+                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:14}}>
+                            {[
+                              {field:"planned",  label:"ЗАПЛАНИРОВАНО", color:"#B8A878"},
+                              {field:"selected", label:"ПОДОБРАНО",     color:"#5A9AB8"},
+                              {field:"paid",     label:"ОПЛАЧЕНО",      color:"#4A9A5A"},
+                            ].map(({field,label,color})=>(
                               <div key={field}>
-                                <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:4}}>
-                                  <div style={{width:6,height:6,borderRadius:"50%",background:STATUS[field].dot}}/>
-                                  <span style={{...M,fontSize:9,color:"#7A6A52"}}>{STATUS[field].label.toUpperCase()}</span>
+                                <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:5}}>
+                                  <div style={{width:7,height:7,borderRadius:"50%",background:color}}/>
+                                  <span style={{...M,fontSize:9,color:"#7A6A52"}}>{label}</span>
                                 </div>
                                 {IS_VIEWER
-                                  ? <div style={{...M,fontSize:13}}>{sub[field]>0?fmt(sub[field]):"—"}</div>
-                                  : <div>
-                                      <input type="number" placeholder="0"
-                                        value={sub[field]||""}
-                                        onChange={e=>updSub(cat.id,sub.id,{[field]:+e.target.value||0})}
-                                        style={{borderColor: field==="planned"&&sub.selected>0&&sub.planned<=sub.selected ? "#5A9AB8" : undefined}}
-                                      />
-                                      {field==="planned"&&sub.selected>0&&sub.planned<=sub.selected&&(
-                                        <div style={{fontFamily:"'DM Mono',monospace",fontSize:9,color:"#5A9AB8",marginTop:2}}>
-                                          🔒 мин = подобрано
-                                        </div>
-                                      )}
-                                    </div>
+                                  ? <div style={{...M,fontSize:14,color:"#2C2416"}}>{sub[field]>0?fmt(sub[field]):"—"}</div>
+                                  : <input type="number" placeholder="0" value={sub[field]||""}
+                                      onChange={e=>updSub(cat.id,sub.id,{[field]:Math.max(0,+e.target.value||0)})}/>
                                 }
                               </div>
                             ))}
                           </div>
+                          {/* Diff summary */}
+                          { (() => { const a=actual(sub); const d=a-(sub.planned||0); const hasData=sub.selected>0||sub.paid>0;
+                            return hasData&&d!==0 ? (
+                            <div style={{...M,fontSize:11,marginBottom:12,padding:"6px 10px",borderRadius:6,
+                              background:d>0?"#FAE0D4":"#D4F0D4",color:d>0?"#8A2A1A":"#1A6A1A"}}>
+                              {d>0?"🔴 Перерасход":"🟢 Экономия"}: {fmt(Math.abs(d))}
+                              {sub.paid>0&&sub.selected>0?" (по оплате)":sub.paid>0?" (по оплате)":sub.selected>0?" (по подбору)":""}
+                            </div>) : null; })() }
                           {!IS_VIEWER&&<>
-                            <div style={{marginBottom:8}}>
+                            <div style={{marginBottom:10}}>
                               <div style={{...M,fontSize:9,color:"#9A8A72",marginBottom:4}}>ССЫЛКА НА ТОВАР</div>
                               <input type="text" placeholder="https://..." value={sub.url}
                                 onChange={e=>updSub(cat.id,sub.id,{url:e.target.value})} style={{width:"100%",marginBottom:10}}/>
                               <ImagePicker imageUrl={sub.imageUrl} imageData={sub.imageData} url={sub.url}
                                 onChange={patch=>updSub(cat.id,sub.id,patch)}/>
                             </div>
-                            <div style={{marginBottom:8}}>
+                            <div style={{marginBottom:10}}>
                               <div style={{...M,fontSize:9,color:"#9A8A72",marginBottom:4}}>КОММЕНТАРИЙ</div>
-                              <textarea rows={2} placeholder="Заметки, размеры, цвет..." value={sub.comment}
-                                onChange={e=>updSub(cat.id,sub.id,{comment:e.target.value})} style={{width:"100%",resize:"vertical"}}/>
+                              <textarea rows={2} placeholder="Заметки, детали, размеры, цвет..."
+                                value={sub.comment} onChange={e=>updSub(cat.id,sub.id,{comment:e.target.value})}
+                                style={{width:"100%",resize:"vertical"}}/>
+                            </div>
+                            <div style={{marginBottom:10}}>
+                              <RoomPicker roomIds={sub.roomIds||[]}
+                                onChange={ids=>updSub(cat.id,sub.id,{roomIds:ids})}/>
                             </div>
                           </>}
-                          {IS_VIEWER&&sub.comment&&<div style={{marginBottom:8,fontSize:13,color:"#7A6A52",fontStyle:"italic"}}>{sub.comment}</div>}
-                          {IS_VIEWER&&sub.url&&<div style={{marginBottom:8}}><a href={sub.url} target="_blank" rel="noreferrer" style={{...M,fontSize:12,color:"#8DB5C8"}}>🔗 открыть</a></div>}
+                          {IS_VIEWER&&sub.comment&&<div style={{marginBottom:10,fontSize:13,color:"#7A6A52",fontStyle:"italic"}}>{sub.comment}</div>}
+                          {(sub.roomIds||[]).length>0&&(
+                            <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:8}}>
+                              <span style={{...M,fontSize:9,color:"#9A8A72",marginRight:4}}>Помещения:</span>
+                              {(sub.roomIds||[]).map(rid=>{const r=ROOM_MAP[rid];return r?<span key={rid} style={{...M,fontSize:9,padding:"2px 7px",borderRadius:10,background:"#EDE7DC",color:"#5A4A32"}}>{r.icon} {r.label}</span>:null;})}
+                            </div>
+                          )}
+                          {IS_VIEWER&&sub.url&&<div style={{marginBottom:10}}><a href={sub.url} target="_blank" rel="noreferrer" style={{...M,fontSize:12,color:"#8DB5C8"}}>🔗 открыть</a></div>}
+
+                          {/* Alternatives */}
                           <div>
                             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                               <div style={{...M,fontSize:9,color:"#9A8A72"}}>АЛЬТЕРНАТИВЫ</div>
@@ -661,7 +852,7 @@ function App(){
                                 <div style={{flex:1,minWidth:0}}>
                                   <div style={{display:"flex",justifyContent:"space-between"}}>
                                     <span style={{fontSize:13}}>{alt.name}</span>
-                                    <div style={{display:"flex",gap:4,flexShrink:0}}>
+                                    <div style={{display:"flex",gap:6,flexShrink:0,alignItems:"center"}}>
                                       {alt.price&&<span style={{...M,fontSize:11,color:"#5A4A32"}}>{alt.price} ₽</span>}
                                       {!IS_VIEWER&&<button className="icon-btn" onClick={()=>removeAlt(cat.id,sub.id,alt.id)}>✕</button>}
                                     </div>
@@ -677,12 +868,8 @@ function App(){
                     </div>
                   );
                 })}
-                <div style={{paddingTop:10,marginTop:4,display:"grid",gridTemplateColumns:"1fr 90px 90px 90px",gap:"0 8px",borderTop:"1px solid #EDE7DC"}}>
-                  <span style={{...M,fontSize:10,color:"#7A6A52"}}>ИТОГО КАТЕГОРИЯ</span>
-                  {[catPl,catSel,catPd].map((v,i)=>(
-                    <div key={i} style={{...M,fontSize:11,textAlign:"right",color:i===0&&v>cat.budget?"#C05030":"#2C2416"}}>{v>0?fmt(v):"—"}</div>
-                  ))}
-                </div>
+
+                {/* + subcat button */}
                 {!IS_VIEWER&&<button className="ghost-btn"
                   onClick={()=>setCats(p=>p.map(c=>c.id!==cat.id?c:{...c,subs:[...c.subs,mk("Новая подкатегория",0)]}))}
                   style={{marginTop:10,width:"100%",textAlign:"center"}}>+ подкатегория</button>}
@@ -692,16 +879,7 @@ function App(){
         );
       })}
 
-      <div style={{...card,background:"#2C2416",color:"#F7F4EF"}}>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8}}>
-          {[{l:"ЛИМИТ",v:flexTotal},{l:"ЗАПЛАНИРОВАНО",v:totalPlanned},{l:"ПОДОБРАНО",v:totalSel},{l:"ОПЛАЧЕНО",v:totalPaid}].map(s=>(
-            <div key={s.l}>
-              <div style={{...M,fontSize:9,color:"#8A7A62",marginBottom:3}}>{s.l}</div>
-              <div style={{...M,fontSize:13}}>{s.v>0?fmt(s.v):"—"}</div>
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* + category button */}
       {!IS_VIEWER&&<button className="ghost-btn" onClick={()=>setNewCatModal(true)}
         style={{width:"100%",textAlign:"center",padding:"10px",marginBottom:8,fontSize:12}}>
         + добавить категорию
@@ -710,25 +888,43 @@ function App(){
   )}
 
   {/* CHART */}
-  {tab==="chart" && (
+  {tab==="chart"&&(
     <div>
       <div style={card}>
-        <div style={{...M,fontSize:10,color:"#9A8A72",letterSpacing:".1em",marginBottom:14}}>ВСЕ КАТЕГОРИИ</div>
+        <div style={{...M,fontSize:10,color:"#9A8A72",letterSpacing:".1em",marginBottom:14}}>ЗАПЛАНИРОВАНО ПО КАТЕГОРИЯМ</div>
         {[
-          {name:"Черновые работы", amount:ROUGH,   color:"#C8A97E"},
-          ...cats.map(c=>({name:c.icon+" "+c.name,amount:c.budget,color:c.color})),
-          {name:"🛡 Резерв",       amount:reserve, color:"#A3B899"},
-        ].sort((a,b)=>b.amount-a.amount).map((item,i)=>(
-          <div key={i} style={{marginBottom:12}}>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+          {name:"Черновые работы", planned:ROUGH, selected:0, color:"#C8A97E"},
+          ...cats.map(c=>{const cc=calcCat(c);return{name:c.icon+" "+c.name,planned:cc.planned,actualSum:cc.actualSum,paid:cc.paid,color:c.color};}),
+        ].sort((a,b)=>b.planned-a.planned).map((item,i)=>(
+          <div key={i} style={{marginBottom:14}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:4,flexWrap:"wrap",gap:4}}>
               <span style={{fontSize:13}}>{item.name}</span>
-              <span style={{...M,fontSize:11}}>{fmt(item.amount)} <span style={{color:"#9A8A72"}}>({pct(item.amount,TOTAL)}%)</span></span>
+              <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                <span style={{...M,fontSize:11,color:"#9A8A72"}}>план {fmt(item.planned)}</span>
+                {item.actualSum!==item.planned&&<span style={{...M,fontSize:11,color:"#5A9AB8"}}>фактически {fmt(item.actualSum)}</span>}
+              </div>
             </div>
-            <div style={{height:18,background:"#EDE7DC",borderRadius:4,overflow:"hidden"}}>
-              <div style={{width:`${(item.amount/ROUGH)*100}%`,height:"100%",background:item.color,borderRadius:4,transition:"width .5s"}}/>
+            <div style={{height:16,background:"#EDE7DC",borderRadius:4,overflow:"hidden",position:"relative"}}>
+              <div style={{position:"absolute",height:"100%",width:`${pct(item.planned,ROUGH)}%`,background:item.color,borderRadius:4,opacity:.5}}/>
+              {item.actualSum!==item.planned&&<div style={{position:"absolute",height:"100%",width:`${pct(Math.min(item.actualSum,item.planned),ROUGH)}%`,background:item.color,borderRadius:4}}/>}
+              {item.paid>0&&<div style={{position:"absolute",height:"100%",width:`${pct(item.paid,ROUGH)}%`,background:"#4A9A5A",borderRadius:4}}/>}
             </div>
           </div>
         ))}
+      </div>
+
+      <div style={card}>
+        <div style={{...M,fontSize:10,color:"#9A8A72",letterSpacing:".1em",marginBottom:12}}>СТАТУСЫ ПО ПОЗИЦИЯМ</div>
+        {STATUSES.map(st=>{
+          const count=cats.flatMap(c=>c.subs).filter(s=>(s.status||"none")===st.id).length;
+          if(!count)return null;
+          return(
+            <div key={st.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+              <span style={{...M,fontSize:11,padding:"2px 8px",borderRadius:8,background:st.bg,color:st.color}}>{st.label}</span>
+              <span style={{...M,fontSize:13}}>{count} поз.</span>
+            </div>
+          );
+        })}
       </div>
     </div>
   )}
@@ -743,7 +939,7 @@ function App(){
           <div style={{fontSize:18,fontWeight:300}}>Новая категория</div>
           <button className="icon-btn" style={{fontSize:18}} onClick={()=>setNewCatModal(false)}>✕</button>
         </div>
-        {[{field:"icon",label:"ИКОНКА",ph:"🛋️"},{field:"name",label:"НАЗВАНИЕ *",ph:"Мебель для спальни"},{field:"budget",label:"БЮДЖЕТ (₽)",ph:"150000"}].map(({field,label,ph})=>(
+        {[{field:"icon",label:"ИКОНКА",ph:"🛋️"},{field:"name",label:"НАЗВАНИЕ *",ph:"Мебель для спальни"}].map(({field,label,ph})=>(
           <div key={field} style={{marginBottom:10}}>
             <div style={{...M,fontSize:9,color:"#9A8A72",marginBottom:4}}>{label}</div>
             <input type="text" placeholder={ph} value={newCat[field]} onChange={e=>setNewCat(p=>({...p,[field]:e.target.value}))} style={{width:"100%"}}/>
@@ -751,8 +947,8 @@ function App(){
         ))}
         <button onClick={()=>{
           if(!newCat.name)return;
-          setCats(p=>[...p,{id:uid(),name:newCat.name,icon:newCat.icon||"📦",color:"#B8C8A8",budget:parseInt(newCat.budget)||0,subs:[mk("Новая подкатегория",0)]}]);
-          setNewCat({name:"",icon:"📦",budget:""});setNewCatModal(false);
+          setCats(p=>[...p,{id:uid(),name:newCat.name,icon:newCat.icon||"📦",color:"#B8C8A8",subs:[mk("Новая подкатегория",0)]}]);
+          setNewCat({name:"",icon:"📦"});setNewCatModal(false);
         }} style={{width:"100%",background:"#2C2416",color:"#F7F4EF",border:"none",padding:"10px",borderRadius:5,cursor:"pointer",...M,fontSize:11,marginTop:6}}>
           СОЗДАТЬ
         </button>
@@ -772,7 +968,7 @@ function App(){
           Скопируй текст → сохрани как .json или скинь мне в чат
         </div>
         <textarea readOnly value={exportText} onClick={e=>e.target.select()}
-          style={{width:"100%",height:160,resize:"vertical",...M,fontSize:9,background:"#F5F0E8",border:"1px solid #DDD5C4",borderRadius:4,padding:8}}/>
+          style={{width:"100%",height:160,...M,fontSize:9,background:"#F5F0E8",border:"1px solid #DDD5C4",borderRadius:4,padding:8,resize:"vertical"}}/>
         <button onClick={()=>navigator.clipboard&&navigator.clipboard.writeText(exportText).then(()=>alert("Скопировано!")).catch(()=>alert("Выдели текст и нажми Ctrl+C"))}
           style={{width:"100%",marginTop:10,background:"#2C2416",color:"#F7F4EF",border:"none",padding:"10px",borderRadius:5,cursor:"pointer",...M,fontSize:11}}>
           📋 скопировать
