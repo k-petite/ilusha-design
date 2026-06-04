@@ -8,7 +8,7 @@
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <!-- Babel for JSX in browser -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.3/babel.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <!-- Firebase -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -259,15 +259,12 @@ function App(){
   };
 
   // ── EXPORT: скачать JSON файл с данными ──
+  const [exportModal,setExportModal]=useState(false);
+  const [exportText,setExportText]=useState("");
   const handleExport=()=>{
-    const data={cats, safetyBuf, exportedAt:new Date().toISOString(), version:"ilusha-design-2026"};
-    const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement("a");
-    a.href=url;
-    a.download=`ilusha-design-${new Date().toISOString().slice(0,10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const data={cats, exportedAt:new Date().toISOString(), version:"ilusha-design-2026"};
+    setExportText(JSON.stringify(data,null,2));
+    setExportModal(true);
   };
 
   // ── IMPORT: загрузить JSON файл и записать в Firebase ──
@@ -849,6 +846,29 @@ function App(){
           style={{width:"100%",background:"#2C2416",color:"#F7F4EF",border:"none",padding:"10px",
             borderRadius:5,cursor:"pointer",fontFamily:"'DM Mono',monospace",fontSize:11,marginTop:6}}>
           СОЗДАТЬ
+        </button>
+      </div>
+    </div>
+  )}
+
+{/* EXPORT MODAL */}
+  {exportModal&&(
+    <div className="overlay" onClick={e=>{if(e.target===e.currentTarget)setExportModal(false)}}>
+      <div className="modal" style={{maxWidth:520}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+          <div style={{fontSize:16,fontWeight:300}}>Экспорт данных</div>
+          <button className="icon-btn" style={{fontSize:18}} onClick={()=>setExportModal(false)}>✕</button>
+        </div>
+        <div style={{...mono,fontSize:10,color:"#7A6A52",marginBottom:10,lineHeight:1.6}}>
+          Скопируй текст ниже → сохрани как файл .json<br/>или скинь мне в чат для работы с данными.
+        </div>
+        <textarea readOnly value={exportText} onClick={e=>e.target.select()}
+          style={{width:"100%",height:180,resize:"vertical",...mono,fontSize:9,
+            background:"#F5F0E8",border:"1px solid #DDD5C4",borderRadius:4,padding:8}}/>
+        <button onClick={()=>navigator.clipboard?.writeText(exportText).then(()=>alert("Скопировано!")).catch(()=>alert("Выдели текст и нажми Ctrl+C"))}
+          style={{width:"100%",marginTop:10,background:"#2C2416",color:"#F7F4EF",border:"none",
+            padding:"10px",borderRadius:5,cursor:"pointer",...mono,fontSize:11}}>
+          📋 скопировать всё
         </button>
       </div>
     </div>
