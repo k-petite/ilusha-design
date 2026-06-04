@@ -30,7 +30,7 @@
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const { useState, useEffect, useRef, useMemo } = React;
+const { useState, useEffect, useRef } = React;
 
 // ── CONSTANTS ──
 const IS_VIEWER  = window.location.search.includes("view") || window.location.hash.includes("view");
@@ -376,26 +376,23 @@ function App(){
   );
 
   // ── DERIVED STATE ──
-  const proj = useMemo(()=>cats ? calcProject(cats) : calcProject([]),[cats]);
+  // ── DERIVED (computed on every render, no useMemo) ──
+  const proj = cats ? calcProject(cats) : calcProject([]);
 
-  // ── FILTER LOGIC ──
-  const filteredCats = useMemo(()=>{
-    if(!cats) return [];
-    return cats.map(cat=>{
-      if(!cat||!cat.subs) return null;
-      if(filterCat!=="all" && cat.id!==filterCat) return null;
-      const filteredSubs = cat.subs.filter(sub=>{
-        if(!sub) return false;
-        const roomOk = filterRoom==="all" ||
-          (sub.roomIds||[]).includes(filterRoom) ||
-          (filterRoom==="common" && (sub.roomIds||[]).includes("common"));
-        const statusOk = filterStatus==="all" || (sub.status||"none")===filterStatus;
-        return roomOk && statusOk;
-      });
-      if(filteredSubs.length===0 && (filterRoom!=="all"||filterStatus!=="all")) return null;
-      return {...cat, subs:filteredSubs};
-    }).filter(Boolean);
-  },[cats, filterCat, filterRoom, filterStatus]);
+  const filteredCats = !cats ? [] : cats.map(cat=>{
+    if(!cat||!cat.subs) return null;
+    if(filterCat!=="all" && cat.id!==filterCat) return null;
+    const filteredSubs = cat.subs.filter(sub=>{
+      if(!sub) return false;
+      const roomOk = filterRoom==="all" ||
+        (sub.roomIds||[]).includes(filterRoom) ||
+        (filterRoom==="common" && (sub.roomIds||[]).includes("common"));
+      const statusOk = filterStatus==="all" || (sub.status||"none")===filterStatus;
+      return roomOk && statusOk;
+    });
+    if(filteredSubs.length===0 && (filterRoom!=="all"||filterStatus!=="all")) return null;
+    return {...cat, subs:filteredSubs};
+  }).filter(Boolean);
 
   const isFiltered = filterRoom!=="all" || filterStatus!=="all" || filterCat!=="all";
 
