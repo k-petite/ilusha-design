@@ -195,7 +195,6 @@ function SaveBadge({status,lastSync}){
 // ── MAIN APP ──
 function App(){
   const [cats,setCats]           = useState(null);
-  const [safetyBuf,setSafetyBuf] = useState(SAFETY);
   const [tab,setTab]             = useState("overview");
   const [openCats,setOpenCats]   = useState({});
   const [openSubs,setOpenSubs]   = useState({});
@@ -231,7 +230,6 @@ function App(){
         setTimeout(()=>setSaveStatus(null),2000);
       } else {
         setCats(DEFAULT_CATS);
-        setSafetyBuf(SAFETY);
       }
     });
     return ()=>unsub();
@@ -284,7 +282,7 @@ function App(){
         if(!data.cats)throw new Error("Неверный формат файла");
         if(!window.confirm(`Загрузить данные от ${data.exportedAt?.slice(0,10)||"неизвестно"}? Текущие данные будут заменены.`))return;
         await window._firebaseSet(window._firebaseRef(window._firebaseDb,DB_KEY),{
-          cats:data.cats, safetyBuf:data.safetyBuf||SAFETY
+          cats:data.cats
         });
         alert("✓ Данные успешно загружены!");
       }catch(err){
