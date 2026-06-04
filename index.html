@@ -376,13 +376,16 @@ function App(){
   );
 
   // ── DERIVED STATE ──
-  const proj = useMemo(()=>calcProject(cats),[cats]);
+  const proj = useMemo(()=>cats ? calcProject(cats) : calcProject([]),[cats]);
 
   // ── FILTER LOGIC ──
   const filteredCats = useMemo(()=>{
+    if(!cats) return [];
     return cats.map(cat=>{
+      if(!cat||!cat.subs) return null;
       if(filterCat!=="all" && cat.id!==filterCat) return null;
       const filteredSubs = cat.subs.filter(sub=>{
+        if(!sub) return false;
         const roomOk = filterRoom==="all" ||
           (sub.roomIds||[]).includes(filterRoom) ||
           (filterRoom==="common" && (sub.roomIds||[]).includes("common"));
