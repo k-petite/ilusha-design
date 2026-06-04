@@ -34,9 +34,10 @@ const { useState, useEffect, useRef } = React;
 
 // ── CONSTANTS ──
 const IS_VIEWER  = window.location.search.includes("view") || window.location.hash.includes("view");
-const DB_KEY     = "ilusha-design-2026";
-const ROUGH      = 1407526;
-const BASE_RESERVE = 500000;
+const DB_KEY       = "ilusha-design-2026";
+const TOTAL_BUDGET = 3500000;
+const ROUGH_PLANNED = 1407526; // сметная стоимость черновых
+const BASE_RESERVE  = 500000;
 
 const STATUSES = [
   { id:"none",      label:"Не искал",   color:"#9A8A72", bg:"#F5F0E8" },
@@ -136,17 +137,30 @@ function calcCat(cat) {
   return { planned, selected, paid, actualSum, delta };
 }
 
-function calcProject(cats) {
-  if(!cats||!cats.length) return { planned:0, selected:0, paid:0, actualSum:0, reserve:BASE_RESERVE, savings:0, overruns:0 };
-  const allSubs   = cats.flatMap(c=>c.subs||[]);
-  const planned   = allSubs.reduce((s,x)=>s+(+x.planned||0), 0);
-  const selected  = allSubs.reduce((s,x)=>s+(+x.selected||0), 0);
-  const paid      = allSubs.reduce((s,x)=>s+(+x.paid||0), 0);
-  const actualSum = allSubs.reduce((s,x)=>s+actual(x), 0);
-  const reserve   = BASE_RESERVE + allSubs.reduce((s,x)=>s+(+x.planned||0)-actual(x), 0);
-  const savings   = allSubs.reduce((s,x)=>s+Math.max(0,(+x.planned||0)-actual(x)), 0);
-  const overruns  = allSubs.reduce((s,x)=>s+Math.max(0,actual(x)-(+x.planned||0)), 0);
-  return { planned, selected, paid, actualSum, reserve, savings, overruns };
+function calcProject(cats, roughData) {
+  const rd = roughData || {planned:ROUGH_PLANNED, paid:0};
+  if(!cats||!cats.length) return {
+    flexPlanned:0, flexActual:0, flexPaid:0,
+    totalPlanned:rd.planned, totalPaid:rd.paid,
+    roughPlanned:rd.planned, roughPaid:rd.paid,
+    reserve:BASE_RESERVE, savings:0, overruns:0, selected:0
+  };
+  const allSubs     = cats.flatMap(c=>c.subs||[]);
+  const flexPlanned = allSubs.reduce((s,x)=>s+(+x.planned||0), 0);
+  const selected    = allSubs.reduce((s,x)=>s+(+x.selected||0), 0);
+  const flexPaid    = allSubs.reduce((s,x)=>s+(+x.paid||0), 0);
+  const flexActual  = allSubs.reduce((s,x)=>s+actual(x), 0);
+  // Reserve: base - delta from flexible items only (rough has its own tracking)
+  const reserve     = BASE_RESERVE + allSubs.reduce((s,x)=>s+(+x.planned||0)-actual(x), 0);
+  const savings     = allSubs.reduce((s,x)=>s+Math.max(0,(+x.planned||0)-actual(x)), 0);
+  const overruns    = allSubs.reduce((s,x)=>s+Math.max(0,actual(x)-(+x.planned||0)), 0);
+  // Totals including rough
+  const totalPlanned = flexPlanned + rd.planned;
+  const totalPaid    = flexPaid + rd.paid;
+  return { flexPlanned, flexActual, flexPaid, selected,
+           totalPlanned, totalPaid,
+           roughPlanned:rd.planned, roughPaid:rd.paid,
+           reserve, savings, overruns };
 }
 
 // ── IMAGE PICKER ──
@@ -270,6 +284,7 @@ function RoomPicker({roomIds, onChange}){
 // ── MAIN APP ──
 function App(){
   const [cats,setCats]           = useState(null);
+  const [roughData,setRoughData]   = useState({planned:ROUGH_PLANNED, paid:0}); // черновые работы
   const [tab,setTab]             = useState("overview");
   const [openCats,setOpenCats]   = useState({});
   const [openSubs,setOpenSubs]   = useState({});
@@ -304,6 +319,7 @@ function App(){
         const val=snap.val();
         if(val&&val.cats){
           // Migrate: add missing fields to old data
+          if(val.roughData) setRoughData(val.roughData);
           const migrated = val.cats.map(cat=>({
             ...cat,
             subs: (cat.subs||[]).map(sub=>({
@@ -336,12 +352,12 @@ function App(){
     saveTimer.current=setTimeout(async()=>{
       try{
         const {db,ref,set}=window._fb;
-        await set(ref(db,DB_KEY),{cats});
+        await set(ref(db,DB_KEY),{cats, roughData});
         setSaveStatus("saved");
         setTimeout(()=>setSaveStatus(null),2000);
       }catch(e){setSaveStatus("error");}
     },800);
-  },[cats,fbReady]);
+  },[cats,roughData,fbReady]);
 
   const handleExport=()=>{
     if(!cats)return;
@@ -377,7 +393,7 @@ function App(){
 
   // ── DERIVED STATE ──
   // ── DERIVED (computed on every render, no useMemo) ──
-  const proj = cats ? calcProject(cats) : calcProject([]);
+  const proj = cats ? calcProject(cats, roughData) : calcProject([], roughData);
 
   const filteredCats = !cats ? [] : cats.map(cat=>{
     if(!cat||!cat.subs) return null;
@@ -459,20 +475,47 @@ function App(){
     </div>
     <h1 style={{fontWeight:300,fontSize:22,marginBottom:16}}>Ilusha Design 2026</h1>
 
-    {/* 4 main cards */}
+    {/* ── SUMMARY ROW 1: budget vs plan ── */}
+    {(()=>{
+      const diff = proj.totalPlanned - TOTAL_BUDGET;
+      const over = diff > 0;
+      return(
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,marginBottom:10}}>
+          <div>
+            <div style={{...M,fontSize:9,letterSpacing:".08em",color:"#8A7A62",marginBottom:4}}>ОБЩИЙ БЮДЖЕТ</div>
+            <div style={{fontSize:16,fontWeight:300,color:"#C8A97E"}}>{fmtK(TOTAL_BUDGET)}</div>
+            <div style={{...M,fontSize:9,color:"#6A5A42",marginTop:2}}>базовый план</div>
+          </div>
+          <div>
+            <div style={{...M,fontSize:9,letterSpacing:".08em",color:"#8A7A62",marginBottom:4}}>ВСЕГО ЗАПЛАНИРОВАНО</div>
+            <div style={{fontSize:16,fontWeight:300,color:"#F7F4EF"}}>{fmtK(proj.totalPlanned)}</div>
+            <div style={{...M,fontSize:9,color:"#6A5A42",marginTop:2}}>черновые + отделка</div>
+          </div>
+          <div>
+            <div style={{...M,fontSize:9,letterSpacing:".08em",color:"#8A7A62",marginBottom:4}}>{over?"ПЕРЕБОР":"В БЮДЖЕТЕ"}</div>
+            <div style={{fontSize:16,fontWeight:300,color:over?"#F0A070":"#90D4A0"}}>{fmtK(Math.abs(diff))}</div>
+            <div style={{...M,fontSize:9,color:"#6A5A42",marginTop:2}}>{over?"выше бюджета":"остаток"}</div>
+          </div>
+          <div>
+            <div style={{...M,fontSize:9,letterSpacing:".08em",color:"#8A7A62",marginBottom:4}}>РЕЗЕРВ 🛡</div>
+            <div style={{fontSize:16,fontWeight:300,color:proj.reserve<50000?"#F0A070":proj.reserve>BASE_RESERVE?"#90D4A0":"#F7F4EF"}}>{fmtK(proj.reserve)}</div>
+            <div style={{...M,fontSize:9,color:"#6A5A42",marginTop:2}}>{proj.reserve<BASE_RESERVE?`−${fmtK(BASE_RESERVE-proj.reserve)}`:proj.reserve>BASE_RESERVE?`+${fmtK(proj.reserve-BASE_RESERVE)} экономия`:"базовый"}</div>
+          </div>
+        </div>
+      );
+    })()}
+    <div style={{height:1,background:"#3C3426",marginBottom:10}}/>
+    {/* ── SUMMARY ROW 2: detail breakdown ── */}
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,marginBottom:14}}>
       {[
-        {l:"ЗАПЛАНИРОВАНО",  v:fmtK(proj.planned),   sub:`черновые +${fmtK(ROUGH)}`, c:"#F7F4EF"},
-        {l:"ФАКТИЧЕСКИ",     v:fmtK(proj.actualSum), sub:proj.selected>0?"подобрано/оплачено":"\u00A0", c:"#F7F4EF"},
-        {l:"ОПЛАЧЕНО",       v:fmtK(proj.paid),      sub:proj.paid>0?`из ${fmtK(proj.actualSum)}`:"\u00A0", c:"#F7F4EF"},
-        {l:"РЕЗЕРВ 🛡",      v:fmtK(proj.reserve),
-          sub:proj.reserve<BASE_RESERVE?`−${fmtK(BASE_RESERVE-proj.reserve)} перерасход`:
-              proj.reserve>BASE_RESERVE?`+${fmtK(proj.reserve-BASE_RESERVE)} экономия`:"\u00A0",
-          c:proj.reserve<50000?"#F0A070":proj.reserve>BASE_RESERVE?"#90D4A0":"#F7F4EF"},
+        {l:"ЧЕРНОВЫЕ план",    v:fmtK(proj.roughPlanned), sub:proj.roughPaid>0?`оплачено ${fmtK(proj.roughPaid)}`:"не оплачено", c:"#C8A97E"},
+        {l:"ОТДЕЛКА+МЕБЕЛЬ",  v:fmtK(proj.flexPlanned),  sub:"сумма запланированного",   c:"#F7F4EF"},
+        {l:"ФАКТИЧЕСКИ",       v:fmtK(proj.flexActual),   sub:proj.selected>0?"подобрано/оплачено":"\u00A0", c:"#F7F4EF"},
+        {l:"ОПЛАЧЕНО ВСЕГО",   v:fmtK(proj.totalPaid),    sub:`черн.${fmtK(proj.roughPaid)} + отд.${fmtK(proj.flexPaid)}`, c:"#F7F4EF"},
       ].map(s=>(
         <div key={s.l}>
-          <div style={{...M,fontSize:9,letterSpacing:".1em",color:"#8A7A62",marginBottom:4}}>{s.l}</div>
-          <div style={{fontSize:16,fontWeight:300,color:s.c}}>{s.v}</div>
+          <div style={{...M,fontSize:9,letterSpacing:".08em",color:"#8A7A62",marginBottom:4}}>{s.l}</div>
+          <div style={{fontSize:14,fontWeight:300,color:s.c}}>{s.v}</div>
           <div style={{...M,fontSize:9,color:"#6A5A42",marginTop:2}}>{s.sub}</div>
         </div>
       ))}
@@ -489,9 +532,9 @@ function App(){
     {/* Progress bar */}
     <div style={{height:4,background:"#3C3426",borderRadius:2,overflow:"hidden",marginBottom:4}}>
       <div style={{display:"flex",height:"100%"}}>
-        <div style={{width:`${pct(ROUGH,ROUGH+proj.planned)}%`,background:"#C8A97E",transition:"width .4s"}}/>
-        <div style={{width:`${pct(proj.paid,ROUGH+proj.planned)}%`,background:"#4A9A5A",transition:"width .4s"}}/>
-        <div style={{width:`${pct(Math.max(0,proj.actualSum-proj.paid),ROUGH+proj.planned)}%`,background:"#8DB5C8",transition:"width .4s"}}/>
+        <div style={{width:`${pct(ROUGH_PLANNED,ROUGH_PLANNED+proj.planned)}%`,background:"#C8A97E",transition:"width .4s"}}/>
+        <div style={{width:`${pct(proj.paid,ROUGH_PLANNED+proj.planned)}%`,background:"#4A9A5A",transition:"width .4s"}}/>
+        <div style={{width:`${pct(Math.max(0,proj.actualSum-proj.paid),ROUGH_PLANNED+proj.planned)}%`,background:"#8DB5C8",transition:"width .4s"}}/>
       </div>
     </div>
     <div style={{...M,display:"flex",gap:14,fontSize:9,color:"#6A5A42",paddingBottom:3}}>
@@ -514,7 +557,7 @@ function App(){
       <div style={card}>
         <div style={{...M,fontSize:10,color:"#9A8A72",letterSpacing:".1em",marginBottom:12}}>СТРУКТУРА БЮДЖЕТА</div>
         {[
-          {name:"Черновые работы",   planned:ROUGH,        selected:0, color:"#C8A97E", note:"А4РЕМОНТ — зафиксировано", fixed:true},
+          {name:"Черновые работы", planned:roughData.planned||ROUGH_PLANNED, selected:0, paid:roughData.paid||0, color:"#C8A97E", note:"А4РЕМОНТ", fixed:true},
           ...cats.map(c=>{const cc=calcCat(c);return{name:c.icon+" "+c.name,planned:cc.planned,actualSum:cc.actualSum,paid:cc.paid,delta:cc.delta,color:c.color};}),
         ].map((item,i)=>(
           <div key={i} style={{padding:"10px 0",borderBottom:"1px solid #F5F0E8"}}>
@@ -570,11 +613,49 @@ function App(){
     </div>
   )}
 
-  {/* ROUGH */}
+  {/* ROUGH TAB */}
   {tab==="rough"&&(
     <div>
+      {/* Summary card */}
+      <div style={{...card,background:"#2C2416",color:"#F7F4EF",marginBottom:12}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
+          {[
+            {l:"ЗАПЛАНИРОВАНО", v:fmt(roughData.planned||ROUGH_PLANNED), c:"#F7F4EF"},
+            {l:"ОПЛАЧЕНО",      v:fmt(roughData.paid||0),                c:roughData.paid>0?"#90D4A0":"#F7F4EF"},
+            {l:"ОСТАТОК",       v:fmt(Math.max(0,(roughData.planned||ROUGH_PLANNED)-(roughData.paid||0))),
+              c:(roughData.paid||0)>(roughData.planned||ROUGH_PLANNED)?"#F0A070":"#F7F4EF"},
+          ].map(s=>(
+            <div key={s.l}>
+              <div style={{...M,fontSize:9,color:"#8A7A62",marginBottom:4}}>{s.l}</div>
+              <div style={{fontSize:16,fontWeight:300,color:s.c}}>{s.v}</div>
+            </div>
+          ))}
+        </div>
+        {!IS_VIEWER&&(
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:14,paddingTop:12,borderTop:"1px solid #3C3426"}}>
+            <div>
+              <div style={{...M,fontSize:9,color:"#8A7A62",marginBottom:5}}>ВСЕГО ЗАПЛАНИРОВАНО (₽)</div>
+              <input type="number" value={roughData.planned||""}
+                placeholder={ROUGH_PLANNED}
+                onChange={e=>setRoughData(p=>({...p,planned:+e.target.value||ROUGH_PLANNED}))}
+                style={{width:"100%",background:"#3C3426",border:"1px solid #5A5040",color:"#F7F4EF",borderRadius:4}}/>
+              <div style={{...M,fontSize:9,color:"#6A5A42",marginTop:3}}>по смете А4РЕМОНТ: {fmt(ROUGH_PLANNED)}</div>
+            </div>
+            <div>
+              <div style={{...M,fontSize:9,color:"#8A7A62",marginBottom:5}}>ВСЕГО ОПЛАЧЕНО (₽)</div>
+              <input type="number" value={roughData.paid||""}
+                placeholder="0"
+                onChange={e=>setRoughData(p=>({...p,paid:+e.target.value||0}))}
+                style={{width:"100%",background:"#3C3426",border:"1px solid #5A5040",color:"#F7F4EF",borderRadius:4}}/>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Group breakdown with paid per group */}
       {ROUGH_GROUPS.map(group=>{
-        const total=group.items.reduce((s,i)=>s+i.a,0);
+        const groupPlanned=group.items.reduce((s,i)=>s+i.a,0);
+        const groupPaid=(roughData.groupPaid||{})[group.g]||0;
         const isOpen=openRough[group.g];
         return(
           <div key={group.g} style={{...card,padding:"13px 15px"}}>
@@ -584,17 +665,39 @@ function App(){
                 <span style={{fontSize:15,color:"#2C2416",fontFamily:"'Cormorant Garamond',serif"}}>{group.g}</span>
                 {group.g==="Потолки"&&<span className="badge" style={{background:"#FDF5E4",color:"#7A5A12"}}>уточнить</span>}
               </button>
-              <span style={{...M,fontSize:13}}>{total===0?"—":fmt(total)}</span>
+              <div style={{display:"flex",alignItems:"center",gap:12}}>
+                {groupPaid>0&&(
+                  <span style={{...M,fontSize:11,color:"#4A9A5A"}}>оплачено {fmt(groupPaid)}</span>
+                )}
+                <span style={{...M,fontSize:13}}>{groupPlanned===0?"—":fmt(groupPlanned)}</span>
+              </div>
             </div>
-            <div style={{height:4,background:"#EDE7DC",borderRadius:3,overflow:"hidden",marginTop:6}}>
-              <div style={{height:"100%",borderRadius:3,width:`${(total/385420)*100}%`,background:"#C8A97E"}}/>
+            <div style={{height:4,background:"#EDE7DC",borderRadius:3,overflow:"hidden",marginTop:6,marginBottom:groupPaid>0?4:0}}>
+              <div style={{display:"flex",height:"100%"}}>
+                <div style={{width:`${pct(groupPaid,groupPlanned||1)}%`,background:"#4A9A5A",borderRadius:3,transition:"width .4s"}}/>
+                <div style={{width:`${pct(Math.max(0,groupPlanned-groupPaid),groupPlanned||1)}%`,background:"#C8A97E",transition:"width .4s"}}/>
+              </div>
             </div>
+            {!IS_VIEWER&&(
+              <div style={{display:"flex",alignItems:"center",gap:8,marginTop:6}}>
+                <span style={{...M,fontSize:10,color:"#9A8A72",flexShrink:0}}>Оплачено:</span>
+                <input type="number" placeholder="0" value={groupPaid||""}
+                  onChange={e=>setRoughData(p=>({...p,
+                    groupPaid:{...(p.groupPaid||{}), [group.g]:+e.target.value||0},
+                    paid: Object.entries({...(p.groupPaid||{}),[group.g]:+e.target.value||0})
+                      .reduce((s,[,v])=>s+v,0)
+                  }))}
+                  style={{width:120}}/>
+              </div>
+            )}
             {isOpen&&(
               <div style={{marginTop:10,paddingTop:10,borderTop:"1px solid #F5F0E8"}}>
                 {group.items.map(item=>(
                   <div key={item.n} style={{padding:"7px 0",borderBottom:"1px solid #F9F5F0"}}>
                     <div style={{display:"flex",justifyContent:"space-between"}}>
-                      <span style={{fontSize:13,color:"#4A3A22"}}>{item.n}{item.note&&<span style={{...M,fontSize:10,color:"#C8A050",marginLeft:6}}>{item.note}</span>}</span>
+                      <span style={{fontSize:13,color:"#4A3A22"}}>{item.n}
+                        {item.note&&<span style={{...M,fontSize:10,color:"#C8A050",marginLeft:6}}>{item.note}</span>}
+                      </span>
                       <span style={{...M,fontSize:12}}>{item.a===0?"—":fmt(item.a)}</span>
                     </div>
                   </div>
@@ -606,8 +709,8 @@ function App(){
       })}
       <div style={{...card,background:"#EDE7DC"}}>
         <div style={{display:"flex",justifyContent:"space-between"}}>
-          <span style={{...M,fontSize:11,color:"#5A4A32"}}>ИТОГО (вкл. накладные 10%)</span>
-          <span style={{...M,fontSize:15}}>{fmt(ROUGH)}</span>
+          <span style={{...M,fontSize:11,color:"#5A4A32"}}>ИТОГО по смете (вкл. накладные 10%)</span>
+          <span style={{...M,fontSize:15}}>{fmt(ROUGH_PLANNED)}</span>
         </div>
       </div>
     </div>
@@ -893,7 +996,7 @@ function App(){
       <div style={card}>
         <div style={{...M,fontSize:10,color:"#9A8A72",letterSpacing:".1em",marginBottom:14}}>ЗАПЛАНИРОВАНО ПО КАТЕГОРИЯМ</div>
         {[
-          {name:"Черновые работы", planned:ROUGH, selected:0, color:"#C8A97E"},
+          {name:"Черновые работы", planned:ROUGH_PLANNED, selected:0, color:"#C8A97E"},
           ...cats.map(c=>{const cc=calcCat(c);return{name:c.icon+" "+c.name,planned:cc.planned,actualSum:cc.actualSum,paid:cc.paid,color:c.color};}),
         ].sort((a,b)=>b.planned-a.planned).map((item,i)=>(
           <div key={i} style={{marginBottom:14}}>
@@ -905,9 +1008,9 @@ function App(){
               </div>
             </div>
             <div style={{height:16,background:"#EDE7DC",borderRadius:4,overflow:"hidden",position:"relative"}}>
-              <div style={{position:"absolute",height:"100%",width:`${pct(item.planned,ROUGH)}%`,background:item.color,borderRadius:4,opacity:.5}}/>
-              {item.actualSum!==item.planned&&<div style={{position:"absolute",height:"100%",width:`${pct(Math.min(item.actualSum,item.planned),ROUGH)}%`,background:item.color,borderRadius:4}}/>}
-              {item.paid>0&&<div style={{position:"absolute",height:"100%",width:`${pct(item.paid,ROUGH)}%`,background:"#4A9A5A",borderRadius:4}}/>}
+              <div style={{position:"absolute",height:"100%",width:`${pct(item.planned,ROUGH_PLANNED)}%`,background:item.color,borderRadius:4,opacity:.5}}/>
+              {item.actualSum!==item.planned&&<div style={{position:"absolute",height:"100%",width:`${pct(Math.min(item.actualSum,item.planned),ROUGH_PLANNED)}%`,background:item.color,borderRadius:4}}/>}
+              {item.paid>0&&<div style={{position:"absolute",height:"100%",width:`${pct(item.paid,ROUGH_PLANNED)}%`,background:"#4A9A5A",borderRadius:4}}/>}
             </div>
           </div>
         ))}
