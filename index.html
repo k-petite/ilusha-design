@@ -35,6 +35,7 @@ const { useState, useEffect, useRef, useMemo } = React;
 // ── CONSTANTS ──
 const IS_VIEWER  = window.location.search.includes("view") || window.location.hash.includes("view");
 const DB_KEY     = "ilusha-design-2026";
+const LOCAL_KEY  = "ilusha-design-2026-local-backup";
 const ROUGH      = 1407526;
 const BASE_RESERVE = 500000;
 
@@ -65,6 +66,49 @@ const mk = (name, planned=0) => ({
   id:uid(), name, planned, selected:0, paid:0,
   status:"none", roomIds:[], url:"", imageUrl:"", imageData:"", comment:"", alts:[]
 });
+
+
+// Normalize imported / Firebase data so older saved versions don't crash the app
+const normalizeCats = data => Array.isArray(data) ? data.map(cat => ({
+  id: cat.id || uid(),
+  name: cat.name || "Без названия",
+  icon: cat.icon || "📦",
+  color: cat.color || "#B8C8A8",
+  subs: Array.isArray(cat.subs) ? cat.subs.map(sub => ({
+    id: sub.id || uid(),
+    name: sub.name || "Без названия",
+    planned: Number(sub.planned) || 0,
+    selected: Number(sub.selected) || 0,
+    paid: Number(sub.paid) || 0,
+    status: sub.status || "none",
+    roomIds: Array.isArray(sub.roomIds) ? sub.roomIds : [],
+    url: sub.url || "",
+    imageUrl: sub.imageUrl || "",
+    imageData: sub.imageData || "",
+    comment: sub.comment || "",
+    alts: Array.isArray(sub.alts) ? sub.alts : []
+  })) : []
+})) : normalizeCats(DEFAULT_CATS);
+
+const loadLocalCats = () => {
+  try {
+    const raw = localStorage.getItem(LOCAL_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && parsed.cats ? normalizeCats(parsed.cats) : null;
+  } catch (e) {
+    console.warn("Local backup load failed", e);
+    return null;
+  }
+};
+
+const saveLocalCats = cats => {
+  try {
+    localStorage.setItem(LOCAL_KEY, JSON.stringify({ cats, savedAt: new Date().toISOString() }));
+  } catch (e) {
+    console.warn("Local backup save failed", e);
+  }
+};
 
 const DEFAULT_CATS = [
   { id:"finish",     name:"Чистовая отделка",    icon:"🪣", color:"#8DB5C8",
@@ -287,34 +331,63 @@ function App(){
     if(window._fb){setFbReady(true);return;}
     const h=()=>setFbReady(true);
     window.addEventListener("firebase-ready",h);
-    return()=>window.removeEventListener("firebase-ready",h);
+
+    // If Firebase CDN/import is blocked or slow, don't leave the app stuck forever.
+    const fallbackTimer=setTimeout(()=>{
+      if(!window._fb){
+        setCats(loadLocalCats() || normalizeCats(DEFAULT_CATS));
+        setFbReady(false);
+        setSaveStatus("local");
+      }
+    },3500);
+
+    return()=>{
+      clearTimeout(fallbackTimer);
+      window.removeEventListener("firebase-ready",h);
+    };
   },[]);
 
   useEffect(()=>{
-    if(!fbReady)return;
+    if(!fbReady || !window._fb)return;
     const {db,ref,onValue}=window._fb;
     const unsub=onValue(ref(db,DB_KEY),snap=>{
       const val=snap.val();
-      if(val&&val.cats) setCats(val.cats);
-      else setCats(DEFAULT_CATS);
+      const nextCats = val&&val.cats ? normalizeCats(val.cats) : (loadLocalCats() || normalizeCats(DEFAULT_CATS));
+      setCats(nextCats);
+      saveLocalCats(nextCats);
       setLastSync(new Date());
       setSaveStatus("saved");
       setTimeout(()=>setSaveStatus(null),2000);
+    },error=>{
+      console.error("Firebase read failed", error);
+      setCats(loadLocalCats() || normalizeCats(DEFAULT_CATS));
+      setSaveStatus("local");
     });
     return()=>unsub();
   },[fbReady]);
 
   useEffect(()=>{
-    if(!cats||IS_VIEWER||!fbReady)return;
+    if(!cats||IS_VIEWER)return;
+    saveLocalCats(cats);
     clearTimeout(saveTimer.current);
+
+    if(!fbReady || !window._fb){
+      setSaveStatus("local");
+      return;
+    }
+
     setSaveStatus("saving");
     saveTimer.current=setTimeout(async()=>{
       try{
         const {db,ref,set}=window._fb;
         await set(ref(db,DB_KEY),{cats});
+        saveLocalCats(cats);
         setSaveStatus("saved");
         setTimeout(()=>setSaveStatus(null),2000);
-      }catch(e){setSaveStatus("error");}
+      }catch(e){
+        console.error("Firebase save failed", e);
+        setSaveStatus("local");
+      }
     },800);
   },[cats,fbReady]);
 
@@ -333,8 +406,13 @@ function App(){
         const data=JSON.parse(ev.target.result);
         if(!data.cats)throw new Error("Неверный формат");
         if(!window.confirm("Загрузить данные? Текущие будут заменены."))return;
-        const {db,ref,set}=window._fb;
-        await set(ref(db,DB_KEY),{cats:data.cats});
+        const nextCats = normalizeCats(data.cats);
+        setCats(nextCats);
+        saveLocalCats(nextCats);
+        if(window._fb){
+          const {db,ref,set}=window._fb;
+          await set(ref(db,DB_KEY),{cats:nextCats});
+        }
         alert("✓ Загружено!");
       }catch(err){alert("Ошибка: "+err.message);}
     };
@@ -420,6 +498,7 @@ function App(){
         {saveStatus==="saving"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#FDF5E4",color:"#8A6A12"}}>сохраняю…</span>}
         {saveStatus==="saved"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#E6F5EA",color:"#2A6A2A"}}>✓ сохранено</span>}
         {saveStatus==="error"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#FAE0D4",color:"#8A2A1A"}}>⚠ ошибка</span>}
+        {saveStatus==="local"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#FDF5E4",color:"#8A6A12"}}>локально</span>}
         {IS_VIEWER
           ? <><span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#E6F1F8",color:"#1A5A7A"}}>👁 просмотр</span>
               {lastSync&&<span style={{...M,fontSize:9,color:"#6A5A42"}}>{lastSync.toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})}</span>}
