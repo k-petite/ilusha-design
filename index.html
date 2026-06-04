@@ -57,7 +57,7 @@ const DB_KEY    = "ilusha-design-2026";
 // ── CONSTANTS ──
 const TOTAL_BUDGET = 3500000;
 const ROUGH_TOTAL  = 1407526;
-const SAFETY       = 350000;
+const SAFETY       = 500_000; // подушка сверх бюджета
 
 const STATUS = {
   planned:  { label: "Запланировано", dot: "#B8A878", bg: "#F5F0E4" },
@@ -72,29 +72,29 @@ const mk  = (name, planned=0) => ({
 });
 
 const DEFAULT_CATS = [
-  { id:"finish",     name:"Чистовая отделка",    icon:"🪣", color:"#8DB5C8", budget:460000,
+  { id:"finish",     name:"Чистовая отделка",    icon:"🪣", color:"#8DB5C8", budget:420000,
     subs:[ mk("Инженерная доска / паркет",254900), mk("Керамогранит",127600),
            mk("Краска (стены + потолок)",59100),   mk("Декоративная штукатурка",9400),
            mk("Плинтусы",13700), mk("Затирка и лак",3000), mk("Доставка материалов",20300) ]},
-  { id:"furniture",  name:"Мебель",               icon:"🛋️", color:"#B8A3C8", budget:291000,
+  { id:"furniture",  name:"Мебель",               icon:"🛋️", color:"#B8A3C8", budget:266000,
     subs:[ mk("Диван",100000), mk("Матрас",65000), mk("Тумба под TV",14400),
            mk("Барная стойка (на заказ)",60900), mk("Стулья барные (×2)",0),
            mk("Журнальный столик",29100), mk("Полка для обуви + вешалка",7300), mk("Сборка и доставка",14200) ]},
-  { id:"kitchen",    name:"Кухня на заказ",        icon:"🍳", color:"#A3C8B8", budget:500000,
+  { id:"kitchen",    name:"Кухня на заказ",        icon:"🍳", color:"#A3C8B8", budget:456474,
     subs:[ mk("Корпусная кухня (на заказ)",316800), mk("Столешница искусственный камень",134500),
            mk("Смеситель кухонный",11300), mk("Диспенсер + арматура мойки",9300),
            mk("Монтаж и доставка кухни",28100) ]},
-  { id:"appliances", name:"Бытовая техника",       icon:"📺", color:"#C8C0A3", budget:197000,
+  { id:"appliances", name:"Бытовая техника",       icon:"📺", color:"#C8C0A3", budget:180000,
     subs:[ mk("Телевизор 70\"",39400), mk("Холодильник встраиваемый",35100),
            mk("Стиральная машина",30500), mk("Духовой шкаф",44100), mk("Варочная панель",8000),
            mk("Чайник + тостер",21200), mk("Умные колонки (×2)",24600),
            mk("Пылесос + отпариватель",3300), mk("Роутер Wi-Fi",2700) ]},
-  { id:"lighting",   name:"Свет и электрика",      icon:"💡", color:"#D4C87E", budget:164000,
+  { id:"lighting",   name:"Свет и электрика",      icon:"💡", color:"#D4C87E", budget:150000,
     subs:[ mk("Светильники потолочные (с/у, кухня, коридор)",53500),
            mk("Светильники встраиваемые (гостиная)",30800), mk("Светодиодная лента RGB",32900),
            mk("Розетки и выключатели Donel R98",25300), mk("Торшер напольный",0),
            mk("Лампы настольные",30500), mk("Доставка",900) ]},
-  { id:"decor",      name:"Декор, текстиль, С/У",  icon:"🪞", color:"#C8A97E", budget:131000,
+  { id:"decor",      name:"Декор, текстиль, С/У",  icon:"🪞", color:"#C8A97E", budget:120000,
     subs:[ mk("Ванна",16000), mk("Унитаз + инсталляция",13900),
            mk("Раковина + столешница С/У",9100), mk("Смесители С/У",6300),
            mk("Полотенцесушитель + аксессуары С/У",3700), mk("Климат-контроль",18300),
@@ -225,7 +225,7 @@ function App(){
       const val = snap.val();
       if(val){
         setCats(val.cats);
-        if(val.safetyBuf !== undefined) setSafetyBuf(val.safetyBuf);
+
         setLastSync(new Date());
         setSaveStatus("saved");
         setTimeout(()=>setSaveStatus(null),2000);
@@ -257,8 +257,7 @@ function App(){
   const handleReset=async()=>{
     if(!window.confirm("Сбросить все данные?"))return;
     await window._firebaseSet(window._firebaseRef(window._firebaseDb,DB_KEY),{
-      cats:DEFAULT_CATS, safetyBuf:SAFETY
-    });
+      cats:DEFAULT_CATS, });
   };
 
   // ── EXPORT: скачать JSON файл с данными ──
@@ -306,8 +305,9 @@ function App(){
 
   // Computed
   const flexTotal     = cats.reduce((s,c)=>s+c.budget,0);
-  const allocated     = ROUGH_TOTAL+flexTotal+safetyBuf;
-  const overBudget    = allocated>TOTAL_BUDGET;
+  const allocated     = ROUGH_TOTAL+flexTotal;
+  const safetyBuf     = TOTAL_BUDGET+SAFETY-allocated; // динамический резерв = 4М - использовано
+  const overBudget    = allocated>TOTAL_BUDGET+SAFETY; // превышение только если вылезли за 4М
   const totalPlanned  = cats.flatMap(c=>c.subs).reduce((s,x)=>s+x.planned,0);
   const totalSelected = cats.flatMap(c=>c.subs).reduce((s,x)=>s+x.selected,0);
   const totalPaid     = cats.flatMap(c=>c.subs).reduce((s,x)=>s+x.paid,0);
@@ -320,8 +320,7 @@ function App(){
     const floor=cat.subs.reduce((s,x)=>s+x.selected,0);
     const clamped=Math.max(floor,newVal);
     const diff=clamped-cat.budget;
-    if(safetyBuf-diff<0)return;
-    setSafetyBuf(safetyBuf-diff);
+    if(allocated+diff > TOTAL_BUDGET+SAFETY) return;
     setCats(p=>p.map(c=>c.id!==catId?c:{...c,budget:clamped}));
   };
 
@@ -410,15 +409,16 @@ function App(){
     </div>
     <h1 style={{fontWeight:300,fontSize:22,marginBottom:14}}>Ilusha Design 2026</h1>
 
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:14}}>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,marginBottom:14}}>
       {[
         {l:"БЮДЖЕТ",       v:fmt(TOTAL_BUDGET)},
         {l:"РАСПРЕДЕЛЕНО", v:fmt(allocated), warn:overBudget},
-        {l:overBudget?"ПРЕВЫШЕНИЕ":"СВОБОДНО", v:fmt(Math.abs(TOTAL_BUDGET-allocated)), warn:overBudget},
+        {l:overBudget?"ПРЕВЫШЕНИЕ":"ДО МАКСИМУМА", v:fmt(Math.abs(TOTAL_BUDGET+SAFETY-allocated)), warn:overBudget},
+        {l:"РЕЗЕРВ 🛡",    v:fmt(SAFETY), ok:true},
       ].map(s=>(
         <div key={s.l}>
           <div style={{...mono,fontSize:9,letterSpacing:".12em",color:"#8A7A62",marginBottom:3}}>{s.l}</div>
-          <div style={{fontSize:15,fontWeight:300,color:s.warn?"#F0A070":"#F7F4EF"}}>{s.v}</div>
+          <div style={{fontSize:15,fontWeight:300,color:s.warn?"#F0A070":s.ok?"#90D4A0":"#F7F4EF"}}>{s.v}</div>
         </div>
       ))}
     </div>
@@ -506,8 +506,8 @@ function App(){
     <div style={{...card,border:"2px solid #A3B899",background:"#F2F8F3"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
         <div>
-          <div style={{...mono,fontSize:10,letterSpacing:".1em",color:"#3A7A4A",marginBottom:4}}>🛡 РЕЗЕРВНЫЙ ФОНД</div>
-          <div style={{fontSize:26,fontWeight:300,color:"#2A5A32"}}>{fmt(safetyBuf)}</div>
+          <div style={{...mono,fontSize:10,letterSpacing:".1em",color:"#3A7A4A",marginBottom:4}}>🛡 ПОДУШКА БЕЗОПАСНОСТИ</div>
+          <div style={{fontSize:26,fontWeight:300,color:"#2A5A32"}}>{fmt(SAFETY)}</div>
           <div style={{...mono,fontSize:10,color:"#5A8A6A",marginTop:2}}>{pct(safetyBuf,TOTAL_BUDGET)}% от бюджета</div>
         </div>
         <div style={{textAlign:"right"}}>
@@ -572,7 +572,7 @@ function App(){
       const catSelected=cat.subs.reduce((s,x)=>s+x.selected,0);
       const catPaid=cat.subs.reduce((s,x)=>s+x.paid,0);
       const lockedFloor=catSelected;
-      const maxSlider=cat.budget+safetyBuf;
+      const maxSlider=Math.min(800000, cat.budget + (TOTAL_BUDGET+SAFETY - allocated));
       return(
         <div key={cat.id} style={card}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
@@ -605,7 +605,7 @@ function App(){
                 : <span/>}
               <span style={{...mono,fontSize:10,
                 color:safetyBuf<50000?"#C05030":safetyBuf<150000?"#8A6A12":"#4A7A4A"}}>
-                🛡 резерв: {fmt(safetyBuf)}
+                🛡 подушка: {fmt(TOTAL_BUDGET+SAFETY-allocated)} из {fmt(SAFETY)}
               </span>
             </div>
           </>}
