@@ -48,10 +48,22 @@ const STATUSES = [
 ];
 const STATUS_MAP = Object.fromEntries(STATUSES.map(s=>[s.id,s]));
 
+const ROOMS = [
+  { id:"common",    label:"Вся квартира", icon:"🏠" },
+  { id:"entry",     label:"Прихожая",    icon:"🚪" },
+  { id:"living",    label:"Гостиная",    icon:"🛋️" },
+  { id:"bedroom",   label:"Спальня",     icon:"🛏️" },
+  { id:"kitchen",   label:"Кухня",       icon:"🍳" },
+  { id:"bathroom",  label:"Санузел",     icon:"🚿" },
+  { id:"wardrobe",  label:"Гардеробная", icon:"👗" },
+  { id:"balcony",   label:"Балкон",      icon:"🌿" },
+];
+const ROOM_MAP = Object.fromEntries(ROOMS.map(r=>[r.id,r]));
+
 const uid = () => Math.random().toString(36).slice(2);
 const mk = (name, planned=0) => ({
   id:uid(), name, planned, selected:0, paid:0,
-  status:"none", url:"", imageUrl:"", imageData:"", comment:"", alts:[]
+  status:"none", roomIds:[], url:"", imageUrl:"", imageData:"", comment:"", alts:[]
 });
 
 const DEFAULT_CATS = [
@@ -105,27 +117,30 @@ const fmtK = n => n<=0?"—":(n>=1e6?(n/1e6).toFixed(1)+"М":Math.round(n/1e3)+"
 const pct  = (a,b) => b===0?0:Math.min(100,Math.round(a/b*100));
 
 // ── DERIVED CALCS ──
+
+// actualCost per sub: paid > selected > planned
+const actual = s => (s.paid>0 ? s.paid : s.selected>0 ? s.selected : s.planned) || 0;
+
 function calcCat(cat) {
-  const planned  = cat.subs.reduce((s,x)=>s+(x.planned||0), 0);
-  const selected = cat.subs.reduce((s,x)=>s+(x.selected||0), 0);
-  const paid     = cat.subs.reduce((s,x)=>s+(x.paid||0), 0);
-  const diff     = selected > 0 ? selected - planned : 0;
-  return { planned, selected, paid, diff };
+  const planned    = cat.subs.reduce((s,x)=>s+(x.planned||0), 0);
+  const selected   = cat.subs.reduce((s,x)=>s+(x.selected||0), 0);
+  const paid       = cat.subs.reduce((s,x)=>s+(x.paid||0), 0);
+  const actualSum  = cat.subs.reduce((s,x)=>s+actual(x), 0);
+  const delta      = actualSum - planned; // <0 = savings, >0 = overrun
+  return { planned, selected, paid, actualSum, delta };
 }
 
 function calcProject(cats) {
-  const planned  = cats.reduce((s,c)=>s+calcCat(c).planned, 0);
-  const selected = cats.reduce((s,c)=>s+calcCat(c).selected, 0);
-  const paid     = cats.reduce((s,c)=>s+calcCat(c).paid, 0);
-  // reserve: base + savings - overruns (only for items that have been selected)
-  const savings  = cats.flatMap(c=>c.subs)
-    .filter(s=>s.selected>0)
-    .reduce((sum,s)=>sum+Math.max(0,(s.planned||0)-(s.selected||0)), 0);
-  const overruns = cats.flatMap(c=>c.subs)
-    .filter(s=>s.selected>0)
-    .reduce((sum,s)=>sum+Math.max(0,(s.selected||0)-(s.planned||0)), 0);
-  const reserve  = BASE_RESERVE + savings - overruns;
-  return { planned, selected, paid, savings, overruns, reserve };
+  const allSubs   = cats.flatMap(c=>c.subs);
+  const planned   = allSubs.reduce((s,x)=>s+(x.planned||0), 0);
+  const selected  = allSubs.reduce((s,x)=>s+(x.selected||0), 0);
+  const paid      = allSubs.reduce((s,x)=>s+(x.paid||0), 0);
+  const actualSum = allSubs.reduce((s,x)=>s+actual(x), 0);
+  // reserve = base - Σ(delta) = base + Σ(planned - actualCost)
+  const reserve   = BASE_RESERVE + allSubs.reduce((s,x)=>s+(x.planned||0)-actual(x), 0);
+  const savings   = allSubs.reduce((s,x)=>s+Math.max(0,(x.planned||0)-actual(x)), 0);
+  const overruns  = allSubs.reduce((s,x)=>s+Math.max(0,actual(x)-(x.planned||0)), 0);
+  return { planned, selected, paid, actualSum, reserve, savings, overruns };
 }
 
 // ── IMAGE PICKER ──
@@ -178,10 +193,13 @@ function ImagePicker({imageUrl,imageData,onChange}){
   );
 }
 
-// ── DIFF BADGE ──
-function DiffBadge({planned, selected}){
-  if(!selected || !planned) return null;
-  const diff = selected - planned;
+// ── DIFF BADGE — shows delta vs planned using actualCost ──
+function DiffBadge({sub}){
+  if(!sub) return null;
+  const a = actual(sub);
+  // only show diff if something is filled in beyond planned
+  if(!sub.selected && !sub.paid) return null;
+  const diff = a - (sub.planned||0);
   if(diff===0) return null;
   const over = diff > 0;
   return(
@@ -210,6 +228,39 @@ function StatusPill({value, onChange}){
   );
 }
 
+// ── ROOM PICKER ──
+function RoomPicker({roomIds, onChange}){
+  const ids = roomIds||[];
+  const toggle = id => {
+    if(id==="common"){
+      // if selecting "whole apartment", clear others
+      onChange(ids.includes("common")?[]:["common"]);
+      return;
+    }
+    const next = ids.includes(id) ? ids.filter(r=>r!==id) : [...ids.filter(r=>r!=="common"),id];
+    onChange(next);
+  };
+  return(
+    <div>
+      <div style={{fontFamily:"'DM Mono',monospace",fontSize:9,color:"#9A8A72",marginBottom:6}}>ПОМЕЩЕНИЯ</div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+        {ROOMS.map(r=>{
+          const active=ids.includes(r.id);
+          return(
+            <button key={r.id} onClick={()=>toggle(r.id)}
+              style={{background:active?"#2C2416":"none",color:active?"#F7F4EF":"#7A6A52",
+                border:"1px solid",borderColor:active?"#2C2416":"#DDD5C4",
+                padding:"3px 9px",borderRadius:12,cursor:"pointer",
+                fontFamily:"'DM Mono',monospace",fontSize:10,transition:"all .15s"}}>
+              {r.icon} {r.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── MAIN APP ──
 function App(){
   const [cats,setCats]           = useState(null);
@@ -221,6 +272,9 @@ function App(){
   const [newAlt,setNewAlt]       = useState({name:"",url:"",imageUrl:"",imageData:"",price:"",comment:""});
   const [newCatModal,setNewCatModal]=useState(false);
   const [newCat,setNewCat]       = useState({name:"",icon:"📦"});
+  const [filterRoom,setFilterRoom]   = useState("all");
+  const [filterStatus,setFilterStatus]=useState("all");
+  const [filterCat,setFilterCat]     = useState("all");
   const [saveStatus,setSaveStatus]=useState(null);
   const [lastSync,setLastSync]   = useState(null);
   const [fbReady,setFbReady]     = useState(!!window._fb);
@@ -299,6 +353,24 @@ function App(){
   // ── DERIVED STATE ──
   const proj = useMemo(()=>calcProject(cats),[cats]);
 
+  // ── FILTER LOGIC ──
+  const filteredCats = useMemo(()=>{
+    return cats.map(cat=>{
+      if(filterCat!=="all" && cat.id!==filterCat) return null;
+      const filteredSubs = cat.subs.filter(sub=>{
+        const roomOk = filterRoom==="all" ||
+          (sub.roomIds||[]).includes(filterRoom) ||
+          (filterRoom==="common" && (sub.roomIds||[]).includes("common"));
+        const statusOk = filterStatus==="all" || (sub.status||"none")===filterStatus;
+        return roomOk && statusOk;
+      });
+      if(filteredSubs.length===0 && (filterRoom!=="all"||filterStatus!=="all")) return null;
+      return {...cat, subs:filteredSubs};
+    }).filter(Boolean);
+  },[cats, filterCat, filterRoom, filterStatus]);
+
+  const isFiltered = filterRoom!=="all" || filterStatus!=="all" || filterCat!=="all";
+
   const updSub=(cid,sid,patch)=>
     setCats(p=>p.map(c=>c.id!==cid?c:{...c,subs:c.subs.map(s=>s.id!==sid?s:{...s,...patch})}));
 
@@ -365,10 +437,12 @@ function App(){
     {/* 4 main cards */}
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,marginBottom:14}}>
       {[
-        {l:"ЗАПЛАНИРОВАНО",    v:fmtK(proj.planned),   sub:`+ черновые ${fmtK(ROUGH)}`, c:"#F7F4EF"},
-        {l:"ПОДОБРАНО",        v:fmtK(proj.selected),  sub:proj.selected>0?`из ${fmtK(proj.planned)}`:"\u00A0", c:"#F7F4EF"},
-        {l:"ОПЛАЧЕНО",         v:fmtK(proj.paid),      sub:proj.paid>0?`из ${fmtK(proj.selected||proj.planned)}`:"\u00A0", c:"#F7F4EF"},
-        {l:"РЕЗЕРВ 🛡",        v:fmtK(proj.reserve),   sub:proj.reserve<BASE_RESERVE?`-${fmtK(BASE_RESERVE-proj.reserve)} перерасход`:proj.reserve>BASE_RESERVE?`+${fmtK(proj.reserve-BASE_RESERVE)} экономия`:"\u00A0",
+        {l:"ЗАПЛАНИРОВАНО",  v:fmtK(proj.planned),   sub:`черновые +${fmtK(ROUGH)}`, c:"#F7F4EF"},
+        {l:"ФАКТИЧЕСКИ",     v:fmtK(proj.actualSum), sub:proj.selected>0?"подобрано/оплачено":"\u00A0", c:"#F7F4EF"},
+        {l:"ОПЛАЧЕНО",       v:fmtK(proj.paid),      sub:proj.paid>0?`из ${fmtK(proj.actualSum)}`:"\u00A0", c:"#F7F4EF"},
+        {l:"РЕЗЕРВ 🛡",      v:fmtK(proj.reserve),
+          sub:proj.reserve<BASE_RESERVE?`−${fmtK(BASE_RESERVE-proj.reserve)} перерасход`:
+              proj.reserve>BASE_RESERVE?`+${fmtK(proj.reserve-BASE_RESERVE)} экономия`:"\u00A0",
           c:proj.reserve<50000?"#F0A070":proj.reserve>BASE_RESERVE?"#90D4A0":"#F7F4EF"},
       ].map(s=>(
         <div key={s.l}>
@@ -392,7 +466,7 @@ function App(){
       <div style={{display:"flex",height:"100%"}}>
         <div style={{width:`${pct(ROUGH,ROUGH+proj.planned)}%`,background:"#C8A97E",transition:"width .4s"}}/>
         <div style={{width:`${pct(proj.paid,ROUGH+proj.planned)}%`,background:"#4A9A5A",transition:"width .4s"}}/>
-        <div style={{width:`${pct(proj.selected-proj.paid,ROUGH+proj.planned)}%`,background:"#8DB5C8",transition:"width .4s"}}/>
+        <div style={{width:`${pct(Math.max(0,proj.actualSum-proj.paid),ROUGH+proj.planned)}%`,background:"#8DB5C8",transition:"width .4s"}}/>
       </div>
     </div>
     <div style={{...M,display:"flex",gap:14,fontSize:9,color:"#6A5A42",paddingBottom:3}}>
@@ -416,7 +490,7 @@ function App(){
         <div style={{...M,fontSize:10,color:"#9A8A72",letterSpacing:".1em",marginBottom:12}}>СТРУКТУРА БЮДЖЕТА</div>
         {[
           {name:"Черновые работы",   planned:ROUGH,        selected:0, color:"#C8A97E", note:"А4РЕМОНТ — зафиксировано", fixed:true},
-          ...cats.map(c=>{const cc=calcCat(c);return{name:c.icon+" "+c.name,planned:cc.planned,selected:cc.selected,paid:cc.paid,diff:cc.diff,color:c.color};}),
+          ...cats.map(c=>{const cc=calcCat(c);return{name:c.icon+" "+c.name,planned:cc.planned,actualSum:cc.actualSum,paid:cc.paid,delta:cc.delta,color:c.color};}),
         ].map((item,i)=>(
           <div key={i} style={{padding:"10px 0",borderBottom:"1px solid #F5F0E8"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:5}}>
@@ -427,8 +501,8 @@ function App(){
               </div>
               <div style={{textAlign:"right",display:"flex",flexDirection:"column",gap:2,alignItems:"flex-end"}}>
                 <div style={{...M,fontSize:13}}>{fmt(item.planned)}</div>
-                {item.selected>0&&<div style={{...M,fontSize:11,color:"#5A9AB8"}}>подобрано {fmt(item.selected)}</div>}
-                {item.diff!==0&&item.diff!==undefined&&<DiffBadge planned={item.planned} selected={item.selected}/>}
+                {item.actualSum!==item.planned&&item.actualSum>0&&<div style={{...M,fontSize:11,color:"#5A9AB8"}}>фактически {fmt(item.actualSum)}</div>}
+                {item.delta!==0&&item.delta!==undefined&&item.actualSum!==item.planned&&<span style={{fontFamily:"'DM Mono',monospace",fontSize:10,padding:"1px 7px",borderRadius:8,background:item.delta>0?"#FAE0D4":"#D4F0D4",color:item.delta>0?"#8A2A1A":"#1A6A1A",flexShrink:0}}>{item.delta>0?"🔴 +":"🟢 "}{fmt(Math.abs(item.delta))}</span>}
               </div>
             </div>
             <div style={{height:5,background:"#EDE7DC",borderRadius:3,overflow:"hidden"}}>
@@ -520,7 +594,64 @@ function App(){
       <div style={{...M,fontSize:10,color:"#9A8A72",marginBottom:10}}>
         {IS_VIEWER?"ПРОСМОТР — только чтение":"КАТЕГОРИИ — вноси суммы по подкатегориям"}
       </div>
-      {cats.map(cat=>{
+
+      {/* FILTER BAR */}
+      <div style={{background:"white",borderRadius:8,padding:"12px 14px",marginBottom:12,boxShadow:"0 1px 5px rgba(44,36,22,.07)"}}>
+        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:10}}>
+          <span style={{...M,fontSize:10,color:"#9A8A72",flexShrink:0}}>ПОМЕЩЕНИЕ:</span>
+          <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+            {[{id:"all",label:"Все",icon:""},...ROOMS].map(r=>(
+              <button key={r.id} onClick={()=>setFilterRoom(r.id)}
+                style={{background:filterRoom===r.id?"#2C2416":"none",
+                  color:filterRoom===r.id?"#F7F4EF":"#7A6A52",
+                  border:"1px solid",borderColor:filterRoom===r.id?"#2C2416":"#DDD5C4",
+                  padding:"3px 9px",borderRadius:12,cursor:"pointer",...M,fontSize:10,transition:"all .15s"}}>
+                {r.icon} {r.label||"Все"}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:10}}>
+          <span style={{...M,fontSize:10,color:"#9A8A72",flexShrink:0}}>СТАТУС:</span>
+          <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+            {[{id:"all",label:"Все",color:"#9A8A72",bg:"#F5F0E8"},...STATUSES].map(s=>(
+              <button key={s.id} onClick={()=>setFilterStatus(s.id)}
+                style={{background:filterStatus===s.id?s.color:"none",
+                  color:filterStatus===s.id?"white":s.color,
+                  border:`1px solid ${filterStatus===s.id?s.color:"#DDD5C4"}`,
+                  padding:"3px 9px",borderRadius:12,cursor:"pointer",...M,fontSize:10,transition:"all .15s"}}>
+                {s.label||"Все"}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+          <span style={{...M,fontSize:10,color:"#9A8A72",flexShrink:0}}>КАТЕГОРИЯ:</span>
+          <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+            {[{id:"all",name:"Все",icon:""},...cats].map(c=>(
+              <button key={c.id} onClick={()=>setFilterCat(c.id)}
+                style={{background:filterCat===c.id?"#2C2416":"none",
+                  color:filterCat===c.id?"#F7F4EF":"#7A6A52",
+                  border:"1px solid",borderColor:filterCat===c.id?"#2C2416":"#DDD5C4",
+                  padding:"3px 9px",borderRadius:12,cursor:"pointer",...M,fontSize:10,transition:"all .15s"}}>
+                {c.icon} {c.name||"Все"}
+              </button>
+            ))}
+          </div>
+        </div>
+        {isFiltered&&(
+          <button onClick={()=>{setFilterRoom("all");setFilterStatus("all");setFilterCat("all");}}
+            style={{marginTop:10,background:"none",border:"none",cursor:"pointer",...M,fontSize:10,color:"#C8A97E",padding:0}}>
+            ✕ сбросить фильтры
+          </button>
+        )}
+      </div>
+
+      {filteredCats.length===0&&<div style={{...card,...M,fontSize:13,color:"#9A8A72",textAlign:"center",padding:24}}>
+        Нет позиций, соответствующих фильтрам
+      </div>}
+
+      {filteredCats.map(cat=>{
         const isCatOpen=openCats[cat.id];
         const cc=calcCat(cat);
         return(
@@ -542,12 +673,12 @@ function App(){
             {/* Cat totals row */}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6,marginBottom:isCatOpen?12:0}}>
               {[
-                {l:"Запланировано", v:cc.planned,  bg:"#F5F0E4", c:"#7A6A52"},
-                {l:"Подобрано",     v:cc.selected, bg:"#E6F1F8", c:"#5A9AB8"},
-                {l:"Оплачено",      v:cc.paid,     bg:"#E6F5EA", c:"#4A9A5A"},
-                {l:"Разница",       v:cc.diff,     bg:cc.diff>0?"#FAE0D4":cc.diff<0?"#D4F0D4":"#F5F0E4",
-                  c:cc.diff>0?"#8A2A1A":cc.diff<0?"#1A6A1A":"#9A8A72",
-                  label:cc.diff>0?"🔴 "+fmt(cc.diff):cc.diff<0?"🟢 "+fmt(Math.abs(cc.diff)):"—"},
+                {l:"Запланировано", v:cc.planned,    bg:"#F5F0E4", c:"#7A6A52"},
+                {l:"Фактически",   v:cc.actualSum,  bg:"#E6F1F8", c:"#5A9AB8"},
+                {l:"Оплачено",     v:cc.paid,        bg:"#E6F5EA", c:"#4A9A5A"},
+                {l:"Разница",      v:cc.delta,       bg:cc.delta>0?"#FAE0D4":cc.delta<0?"#D4F0D4":"#F5F0E4",
+                  c:cc.delta>0?"#8A2A1A":cc.delta<0?"#1A6A1A":"#9A8A72",
+                  label:cc.delta>0?"🔴 "+fmt(cc.delta):cc.delta<0?"🟢 "+fmt(Math.abs(cc.delta)):"—"},
               ].map(x=>(
                 <div key={x.l} style={{background:x.bg,borderRadius:5,padding:"6px 8px"}}>
                   <div style={{...M,fontSize:9,color:"#7A6A52",marginBottom:2}}>{x.l}</div>
@@ -593,7 +724,7 @@ function App(){
                             }
                             <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0,flexWrap:"wrap"}}>
                               <StatusPill value={sub.status||"none"} onChange={v=>updSub(cat.id,sub.id,{status:v})}/>
-                              <DiffBadge planned={sub.planned} selected={sub.selected}/>
+                              <DiffBadge sub={sub}/>
                               {sub.alts&&sub.alts.length>0&&<span className="badge" style={{background:"#EDE7DC",color:"#7A6A52"}}>{sub.alts.length} альт.</span>}
                               {!IS_VIEWER&&<button className="icon-btn" title="Удалить"
                                 onClick={e=>{e.stopPropagation();if(window.confirm(`Удалить "${sub.name}"?`))setCats(p=>p.map(c=>c.id!==cat.id?c:{...c,subs:c.subs.filter(s=>s.id!==sub.id)}));}}
@@ -607,10 +738,19 @@ function App(){
                           {sub.comment&&<div style={{fontSize:12,color:"#7A6A52",marginTop:3,fontStyle:"italic"}}>{sub.comment}</div>}
                           {/* Compact amounts when collapsed */}
                           {!isSubOpen&&(sub.planned>0||sub.selected>0)&&(
-                            <div style={{display:"flex",gap:12,marginTop:5,...M,fontSize:11,color:"#7A6A52"}}>
+                            <div style={{display:"flex",gap:12,marginTop:5,...M,fontSize:11,color:"#7A6A52",flexWrap:"wrap"}}>
                               {sub.planned>0&&<span>план: {fmt(sub.planned)}</span>}
                               {sub.selected>0&&<span style={{color:"#5A9AB8"}}>подобрано: {fmt(sub.selected)}</span>}
                               {sub.paid>0&&<span style={{color:"#4A9A5A"}}>оплачено: {fmt(sub.paid)}</span>}
+                            </div>
+                          )}
+                          {/* Room tags (always visible) */}
+                          {(sub.roomIds||[]).length>0&&(
+                            <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:5}}>
+                              {(sub.roomIds||[]).map(rid=>{
+                                const r=ROOM_MAP[rid];
+                                return r?<span key={rid} style={{...M,fontSize:9,padding:"2px 7px",borderRadius:10,background:"#EDE7DC",color:"#5A4A32"}}>{r.icon} {r.label}</span>:null;
+                              })}
                             </div>
                           )}
                         </div>
@@ -640,13 +780,13 @@ function App(){
                             ))}
                           </div>
                           {/* Diff summary */}
-                          {sub.selected>0&&sub.planned>0&&(
+                          { (() => { const a=actual(sub); const d=a-(sub.planned||0); const hasData=sub.selected>0||sub.paid>0;
+                            return hasData&&d!==0 ? (
                             <div style={{...M,fontSize:11,marginBottom:12,padding:"6px 10px",borderRadius:6,
-                              background:sub.selected>sub.planned?"#FAE0D4":sub.selected<sub.planned?"#D4F0D4":"#EDE7DC",
-                              color:sub.selected>sub.planned?"#8A2A1A":sub.selected<sub.planned?"#1A6A1A":"#7A6A52"}}>
-                              {sub.selected>sub.planned?"🔴 Перерасход":"🟢 Экономия"}: {fmt(Math.abs(sub.selected-sub.planned))}
-                            </div>
-                          )}
+                              background:d>0?"#FAE0D4":"#D4F0D4",color:d>0?"#8A2A1A":"#1A6A1A"}}>
+                              {d>0?"🔴 Перерасход":"🟢 Экономия"}: {fmt(Math.abs(d))}
+                              {sub.paid>0&&sub.selected>0?" (по оплате)":sub.paid>0?" (по оплате)":sub.selected>0?" (по подбору)":""}
+                            </div>) : null; })() }
                           {!IS_VIEWER&&<>
                             <div style={{marginBottom:10}}>
                               <div style={{...M,fontSize:9,color:"#9A8A72",marginBottom:4}}>ССЫЛКА НА ТОВАР</div>
@@ -661,8 +801,18 @@ function App(){
                                 value={sub.comment} onChange={e=>updSub(cat.id,sub.id,{comment:e.target.value})}
                                 style={{width:"100%",resize:"vertical"}}/>
                             </div>
+                            <div style={{marginBottom:10}}>
+                              <RoomPicker roomIds={sub.roomIds||[]}
+                                onChange={ids=>updSub(cat.id,sub.id,{roomIds:ids})}/>
+                            </div>
                           </>}
                           {IS_VIEWER&&sub.comment&&<div style={{marginBottom:10,fontSize:13,color:"#7A6A52",fontStyle:"italic"}}>{sub.comment}</div>}
+                          {(sub.roomIds||[]).length>0&&(
+                            <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:8}}>
+                              <span style={{...M,fontSize:9,color:"#9A8A72",marginRight:4}}>Помещения:</span>
+                              {(sub.roomIds||[]).map(rid=>{const r=ROOM_MAP[rid];return r?<span key={rid} style={{...M,fontSize:9,padding:"2px 7px",borderRadius:10,background:"#EDE7DC",color:"#5A4A32"}}>{r.icon} {r.label}</span>:null;})}
+                            </div>
+                          )}
                           {IS_VIEWER&&sub.url&&<div style={{marginBottom:10}}><a href={sub.url} target="_blank" rel="noreferrer" style={{...M,fontSize:12,color:"#8DB5C8"}}>🔗 открыть</a></div>}
 
                           {/* Alternatives */}
@@ -719,19 +869,19 @@ function App(){
         <div style={{...M,fontSize:10,color:"#9A8A72",letterSpacing:".1em",marginBottom:14}}>ЗАПЛАНИРОВАНО ПО КАТЕГОРИЯМ</div>
         {[
           {name:"Черновые работы", planned:ROUGH, selected:0, color:"#C8A97E"},
-          ...cats.map(c=>{const cc=calcCat(c);return{name:c.icon+" "+c.name,planned:cc.planned,selected:cc.selected,paid:cc.paid,color:c.color};}),
+          ...cats.map(c=>{const cc=calcCat(c);return{name:c.icon+" "+c.name,planned:cc.planned,actualSum:cc.actualSum,paid:cc.paid,color:c.color};}),
         ].sort((a,b)=>b.planned-a.planned).map((item,i)=>(
           <div key={i} style={{marginBottom:14}}>
             <div style={{display:"flex",justifyContent:"space-between",marginBottom:4,flexWrap:"wrap",gap:4}}>
               <span style={{fontSize:13}}>{item.name}</span>
               <div style={{display:"flex",gap:8,alignItems:"center"}}>
                 <span style={{...M,fontSize:11,color:"#9A8A72"}}>план {fmt(item.planned)}</span>
-                {item.selected>0&&<span style={{...M,fontSize:11,color:"#5A9AB8"}}>подобрано {fmt(item.selected)}</span>}
+                {item.actualSum!==item.planned&&<span style={{...M,fontSize:11,color:"#5A9AB8"}}>фактически {fmt(item.actualSum)}</span>}
               </div>
             </div>
             <div style={{height:16,background:"#EDE7DC",borderRadius:4,overflow:"hidden",position:"relative"}}>
               <div style={{position:"absolute",height:"100%",width:`${pct(item.planned,ROUGH)}%`,background:item.color,borderRadius:4,opacity:.5}}/>
-              {item.selected>0&&<div style={{position:"absolute",height:"100%",width:`${pct(Math.min(item.selected,item.planned),ROUGH)}%`,background:item.color,borderRadius:4}}/>}
+              {item.actualSum!==item.planned&&<div style={{position:"absolute",height:"100%",width:`${pct(Math.min(item.actualSum,item.planned),ROUGH)}%`,background:item.color,borderRadius:4}}/>}
               {item.paid>0&&<div style={{position:"absolute",height:"100%",width:`${pct(item.paid,ROUGH)}%`,background:"#4A9A5A",borderRadius:4}}/>}
             </div>
           </div>
