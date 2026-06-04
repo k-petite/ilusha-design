@@ -141,26 +141,31 @@ function calcProject(cats, roughData) {
   const rd = roughData || {planned:ROUGH_PLANNED, paid:0};
   if(!cats||!cats.length) return {
     flexPlanned:0, flexActual:0, flexPaid:0,
-    totalPlanned:rd.planned, totalPaid:rd.paid,
+    totalPlanned:rd.planned, totalPaid:rd.paid, toPay:rd.planned,
     roughPlanned:rd.planned, roughPaid:rd.paid,
-    reserve:BASE_RESERVE, savings:0, overruns:0, selected:0
+    reserve:BASE_RESERVE, savings:0, overruns:0, selected:0,
+    budgetDiff: rd.planned - TOTAL_BUDGET,
   };
   const allSubs     = cats.flatMap(c=>c.subs||[]);
   const flexPlanned = allSubs.reduce((s,x)=>s+(+x.planned||0), 0);
   const selected    = allSubs.reduce((s,x)=>s+(+x.selected||0), 0);
   const flexPaid    = allSubs.reduce((s,x)=>s+(+x.paid||0), 0);
   const flexActual  = allSubs.reduce((s,x)=>s+actual(x), 0);
-  // Reserve: base - delta from flexible items only (rough has its own tracking)
   const reserve     = BASE_RESERVE + allSubs.reduce((s,x)=>s+(+x.planned||0)-actual(x), 0);
   const savings     = allSubs.reduce((s,x)=>s+Math.max(0,(+x.planned||0)-actual(x)), 0);
   const overruns    = allSubs.reduce((s,x)=>s+Math.max(0,actual(x)-(+x.planned||0)), 0);
-  // Totals including rough
   const totalPlanned = flexPlanned + rd.planned;
-  const totalPaid    = flexPaid + rd.paid;
+  const totalPaid    = flexPaid + (rd.paid||0);
+  // К оплате: actualCost (план/подобрано) минус уже оплачено — по всем позициям включая черновые
+  const flexToPay    = Math.max(0, flexActual - flexPaid);
+  const roughToPay   = Math.max(0, (rd.planned||ROUGH_PLANNED) - (rd.paid||0));
+  const toPay        = flexToPay + roughToPay;
+  // Остаток до бюджета
+  const budgetDiff   = totalPlanned - TOTAL_BUDGET; // >0 перебор, <0 остаток
   return { flexPlanned, flexActual, flexPaid, selected,
-           totalPlanned, totalPaid,
+           totalPlanned, totalPaid, toPay,
            roughPlanned:rd.planned, roughPaid:rd.paid,
-           reserve, savings, overruns };
+           reserve, savings, overruns, budgetDiff };
 }
 
 // ── IMAGE PICKER ──
@@ -475,50 +480,70 @@ function App(){
     </div>
     <h1 style={{fontWeight:300,fontSize:22,marginBottom:16}}>Ilusha Design 2026</h1>
 
-    {/* ── SUMMARY ROW 1: budget vs plan ── */}
-    {(()=>{
-      const diff = proj.totalPlanned - TOTAL_BUDGET;
-      const over = diff > 0;
-      return(
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,marginBottom:10}}>
+    {/* ── HEADER SUMMARY: 5 cards ── */}
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr",gap:8,marginBottom:12}}>
+
+      {/* 1. Общий бюджет */}
+      <div>
+        <div style={{...M,fontSize:9,letterSpacing:".08em",color:"#8A7A62",marginBottom:4}}>ОБЩИЙ БЮДЖЕТ</div>
+        <div style={{fontSize:15,fontWeight:300,color:"#C8A97E"}}>{fmtK(TOTAL_BUDGET)}</div>
+        <div style={{...M,fontSize:9,color:"#6A5A42",marginTop:2}}>базовый план</div>
+      </div>
+
+      {/* 2. Всего запланировано */}
+      <div>
+        <div style={{...M,fontSize:9,letterSpacing:".08em",color:"#8A7A62",marginBottom:4}}>ЗАПЛАНИРОВАНО</div>
+        <div style={{fontSize:15,fontWeight:300,color:"#F7F4EF"}}>{fmtK(proj.totalPlanned)}</div>
+        <div style={{...M,fontSize:9,color:"#6A5A42",marginTop:2}}>черновые + отделка</div>
+      </div>
+
+      {/* 3. Остаток до бюджета */}
+      {(()=>{
+        const over = proj.budgetDiff > 0;
+        return(
           <div>
-            <div style={{...M,fontSize:9,letterSpacing:".08em",color:"#8A7A62",marginBottom:4}}>ОБЩИЙ БЮДЖЕТ</div>
-            <div style={{fontSize:16,fontWeight:300,color:"#C8A97E"}}>{fmtK(TOTAL_BUDGET)}</div>
-            <div style={{...M,fontSize:9,color:"#6A5A42",marginTop:2}}>базовый план</div>
+            <div style={{...M,fontSize:9,letterSpacing:".08em",color:"#8A7A62",marginBottom:4}}>
+              {over?"ПЕРЕБОР БЮДЖЕТА":"ОСТАТОК ДО БЮДЖЕТА"}
+            </div>
+            <div style={{fontSize:15,fontWeight:300,color:over?"#F0A070":"#90D4A0"}}>
+              {over?"+ ":""}{fmtK(Math.abs(proj.budgetDiff))}
+            </div>
+            <div style={{...M,fontSize:9,color:"#6A5A42",marginTop:2}}>
+              {over?"запланировано больше бюджета":"ещё можно заложить"}
+            </div>
           </div>
-          <div>
-            <div style={{...M,fontSize:9,letterSpacing:".08em",color:"#8A7A62",marginBottom:4}}>ВСЕГО ЗАПЛАНИРОВАНО</div>
-            <div style={{fontSize:16,fontWeight:300,color:"#F7F4EF"}}>{fmtK(proj.totalPlanned)}</div>
-            <div style={{...M,fontSize:9,color:"#6A5A42",marginTop:2}}>черновые + отделка</div>
-          </div>
-          <div>
-            <div style={{...M,fontSize:9,letterSpacing:".08em",color:"#8A7A62",marginBottom:4}}>{over?"ПЕРЕБОР":"В БЮДЖЕТЕ"}</div>
-            <div style={{fontSize:16,fontWeight:300,color:over?"#F0A070":"#90D4A0"}}>{fmtK(Math.abs(diff))}</div>
-            <div style={{...M,fontSize:9,color:"#6A5A42",marginTop:2}}>{over?"выше бюджета":"остаток"}</div>
-          </div>
-          <div>
-            <div style={{...M,fontSize:9,letterSpacing:".08em",color:"#8A7A62",marginBottom:4}}>РЕЗЕРВ 🛡</div>
-            <div style={{fontSize:16,fontWeight:300,color:proj.reserve<50000?"#F0A070":proj.reserve>BASE_RESERVE?"#90D4A0":"#F7F4EF"}}>{fmtK(proj.reserve)}</div>
-            <div style={{...M,fontSize:9,color:"#6A5A42",marginTop:2}}>{proj.reserve<BASE_RESERVE?`−${fmtK(BASE_RESERVE-proj.reserve)}`:proj.reserve>BASE_RESERVE?`+${fmtK(proj.reserve-BASE_RESERVE)} экономия`:"базовый"}</div>
-          </div>
+        );
+      })()}
+
+      {/* 4. Резерв */}
+      <div>
+        <div style={{...M,fontSize:9,letterSpacing:".08em",color:"#8A7A62",marginBottom:4}}>РЕЗЕРВ 🛡</div>
+        <div style={{fontSize:15,fontWeight:300,
+          color:proj.reserve<50000?"#F0A070":proj.reserve>BASE_RESERVE?"#90D4A0":"#F7F4EF"}}>
+          {fmtK(proj.reserve)}
         </div>
-      );
-    })()}
-    <div style={{height:1,background:"#3C3426",marginBottom:10}}/>
-    {/* ── SUMMARY ROW 2: detail breakdown ── */}
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,marginBottom:14}}>
-      {[
-        {l:"ЧЕРНОВЫЕ план",    v:fmtK(proj.roughPlanned), sub:proj.roughPaid>0?`оплачено ${fmtK(proj.roughPaid)}`:"не оплачено", c:"#C8A97E"},
-        {l:"ОТДЕЛКА+МЕБЕЛЬ",  v:fmtK(proj.flexPlanned),  sub:"сумма запланированного",   c:"#F7F4EF"},
-        {l:"ФАКТИЧЕСКИ",       v:fmtK(proj.flexActual),   sub:proj.selected>0?"подобрано/оплачено":"\u00A0", c:"#F7F4EF"},
-        {l:"ОПЛАЧЕНО ВСЕГО",   v:fmtK(proj.totalPaid),    sub:`черн.${fmtK(proj.roughPaid)} + отд.${fmtK(proj.flexPaid)}`, c:"#F7F4EF"},
-      ].map(s=>(
-        <div key={s.l}>
-          <div style={{...M,fontSize:9,letterSpacing:".08em",color:"#8A7A62",marginBottom:4}}>{s.l}</div>
-          <div style={{fontSize:14,fontWeight:300,color:s.c}}>{s.v}</div>
-          <div style={{...M,fontSize:9,color:"#6A5A42",marginTop:2}}>{s.sub}</div>
+        <div style={{...M,fontSize:9,color:"#6A5A42",marginTop:2}}>
+          {proj.reserve<BASE_RESERVE
+            ? `из ${fmtK(BASE_RESERVE)} базы`
+            : proj.reserve>BASE_RESERVE
+              ? `+${fmtK(proj.reserve-BASE_RESERVE)} экономия`
+              : "500К базовый"}
         </div>
-      ))}
+      </div>
+
+      {/* 5. К оплате */}
+      <div>
+        <div style={{...M,fontSize:9,letterSpacing:".08em",color:"#8A7A62",marginBottom:4}}>К ОПЛАТЕ</div>
+        <div style={{fontSize:15,fontWeight:300,color:proj.toPay>0?"#F0C060":"#90D4A0"}}>
+          {proj.toPay>0?fmtK(proj.toPay):"всё оплачено ✓"}
+        </div>
+        <div style={{...M,fontSize:9,color:"#6A5A42",marginTop:2}}>
+          {proj.toPay>0
+            ? `план/подобрано − оплачено ${fmtK(proj.totalPaid)}`
+            : "\u00A0"}
+        </div>
+      </div>
+
     </div>
 
     {/* savings / overruns row */}
