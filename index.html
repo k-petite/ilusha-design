@@ -247,8 +247,25 @@ function App(){
   const totalPaid    = cats.flatMap(c=>c.subs).reduce((s,x)=>s+x.paid,0);
   const maxBar       = Math.max(...cats.map(c=>c.budget),ROUGH);
 
-  const updSub=(cid,sid,patch)=>
-    setCats(p=>p.map(c=>c.id!==cid?c:{...c,subs:c.subs.map(s=>s.id!==sid?s:{...s,...patch})}));
+  // updSub: when "planned" changes, auto-update category budget to match sum of all planned
+  const updSub=(cid,sid,patch)=>{
+    setCats(p=>p.map(c=>{
+      if(c.id!==cid) return c;
+      const newSubs = c.subs.map(s=>{
+        if(s.id!==sid) return s;
+        const updated = {...s,...patch};
+        // Floor: planned can't go below selected
+        if(patch.planned !== undefined){
+          updated.planned = Math.max(updated.selected||0, +patch.planned||0);
+        }
+        return updated;
+      });
+      // Auto-sync budget = sum of all planned (if any planned > 0)
+      const sumPlanned = newSubs.reduce((s,x)=>s+(x.planned||0),0);
+      const newBudget = sumPlanned > 0 ? sumPlanned : c.budget;
+      return {...c, subs:newSubs, budget:newBudget};
+    }));
+  };
 
   const handleCatBudget=(catId,newVal)=>{
     const cat=cats.find(c=>c.id===catId);
@@ -519,7 +536,13 @@ function App(){
               <input type="range" min={floor} max={maxSlider} step={5000} value={cat.budget}
                 onChange={e=>handleCatBudget(cat.id,e.target.value)}
                 style={{accentColor:cat.color,marginBottom:4}}/>
-              <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                {catPl>0
+                  ? <span style={{...M,fontSize:10,color:"#8DB5C8"}}>
+                      📋 лимит = сумма запланированного
+                    </span>
+                  : <span/>
+                }
                 <span style={{...M,fontSize:10,color:reserve<50000?"#C05030":reserve<150000?"#8A6A12":"#4A7A4A"}}>
                   🛡 резерв: {fmt(reserve)}
                 </span>
@@ -594,7 +617,18 @@ function App(){
                                 </div>
                                 {IS_VIEWER
                                   ? <div style={{...M,fontSize:13}}>{sub[field]>0?fmt(sub[field]):"—"}</div>
-                                  : <input type="number" placeholder="0" value={sub[field]||""} onChange={e=>updSub(cat.id,sub.id,{[field]:+e.target.value||0})}/>
+                                  : <div>
+                                      <input type="number" placeholder="0"
+                                        value={sub[field]||""}
+                                        onChange={e=>updSub(cat.id,sub.id,{[field]:+e.target.value||0})}
+                                        style={{borderColor: field==="planned"&&sub.selected>0&&sub.planned<=sub.selected ? "#5A9AB8" : undefined}}
+                                      />
+                                      {field==="planned"&&sub.selected>0&&sub.planned<=sub.selected&&(
+                                        <div style={{fontFamily:"'DM Mono',monospace",fontSize:9,color:"#5A9AB8",marginTop:2}}>
+                                          🔒 мин = подобрано
+                                        </div>
+                                      )}
+                                    </div>
                                 }
                               </div>
                             ))}
