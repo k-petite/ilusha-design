@@ -400,9 +400,6 @@ function App(){
             ↑ импорт
           </button>
           <input ref={importRef} type="file" accept=".json" style={{display:"none"}} onChange={handleImport}/>
-          <button onClick={handleReset}
-            style={{background:"none",border:"1px solid #6A4A4A",color:"#C89A9A",padding:"5px 12px",
-              borderRadius:4,cursor:"pointer",fontFamily:"'DM Mono',monospace",fontSize:10}}>↩ сброс</button>
         </>}
         {IS_VIEWER&&<button onClick={()=>window.location.reload()}
           style={{background:"none",border:"1px solid #4A6A7A",color:"#8ABACA",padding:"5px 12px",
