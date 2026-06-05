@@ -132,6 +132,15 @@ const pct  = (a,b) => b===0?0:Math.min(100,Math.round(a/b*100));
 
 // actualCost per sub: paid > selected > planned
 const toNum = v => { const n=parseFloat(v); return isNaN(n)?0:n; };
+// Compute effective price for an alt (unitPrice * qty if set, else price)
+const altPrice = a => {
+  if(!a) return 0;
+  const up = toNum(a.unitPrice);
+  const qty = toNum(a.qty)||1;
+  if(up>0) return up*qty;
+  return toNum(a.price);
+};
+
 const actual = s => {
   if(!s) return 0;
   // If an active alternative is set, pull its paid/price
@@ -139,7 +148,8 @@ const actual = s => {
     const a = s.alts.find(x=>x.id===s.activeAltId);
     if(a) {
       if(toNum(a.paid)>0) return toNum(a.paid);
-      if(toNum(a.price)>0) return toNum(a.price);
+      const ap = altPrice(a);
+      if(ap>0) return ap;
     }
   }
   if(toNum(s.paid)>0) return toNum(s.paid);
@@ -151,7 +161,7 @@ const subSelected = s => {
   if(!s) return 0;
   if(s.activeAltId && s.alts) {
     const a = s.alts.find(x=>x.id===s.activeAltId);
-    if(a && a.price && +a.price>0) return +a.price;
+    const ap=altPrice(a); if(ap>0) return ap;
   }
   return s.selected||0;
 };
@@ -563,7 +573,7 @@ function App(){
   <div style={{background:"#2C2416",color:"#F7F4EF",padding:"22px 18px 0"}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
       <div style={{...M,fontSize:9,letterSpacing:".18em",color:"#C8A97E"}}>БЮДЖЕТ РЕМОНТА</div>
-      <div style={{...M,fontSize:9,color:"#5A4A32",marginLeft:8}}>v2.2</div>
+      <div style={{...M,fontSize:9,color:"#5A4A32",marginLeft:8}}>v2.3</div>
       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
         {saveStatus==="saving"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#FDF5E4",color:"#8A6A12"}}>сохраняю…</span>}
         {saveStatus==="saved"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#E6F5EA",color:"#2A6A2A"}}>✓ сохранено</span>}
@@ -1084,11 +1094,7 @@ function App(){
                                   ? <span style={{...M,fontSize:9,padding:"2px 7px",borderRadius:8,background:"#F0EAE0",color:"#7A6A52"}}>— не нужно</span>
                                   : <span style={{...M,fontSize:9,padding:"2px 7px",borderRadius:8,background:"#F5F0E8",color:"#9A8A72"}}>👁 посмотреть</span>
                               }
-                              {/* Active alt badge */}
-                              {sub.activeAltId&&(()=>{
-                                const a=(sub.alts||[]).find(x=>x.id===sub.activeAltId);
-                                return a?<span style={{...M,fontSize:9,padding:"2px 7px",borderRadius:8,background:"#E6F5EA",color:"#2A6A2A"}}>✓ {a.name}</span>:null;
-                              })()}
+
                               <DiffBadge sub={sub}/>
                               {sub.alts&&sub.alts.length>0&&<span className="badge" style={{background:"#EDE7DC",color:"#7A6A52"}}>{sub.alts.length} вар.</span>}
                               {!IS_VIEWER&&<button className="icon-btn" title="Удалить"
@@ -1096,11 +1102,23 @@ function App(){
                                 style={{fontSize:11,color:"#C8A0A0",opacity:.6}}>🗑</button>}
                             </div>
                           </div>
-                          {sub.url&&<a href={sub.url} target="_blank" rel="noreferrer"
-                            style={{fontSize:10,...M,color:"#8DB5C8",display:"inline-block",marginTop:3,
-                              overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:180,verticalAlign:"bottom"}}>
-                            🔗 {(()=>{try{return new URL(sub.url).hostname.replace("www.","")}catch(e){return sub.url.slice(0,30)}})()}
-                          </a>}
+                          {/* Active alt URL + name — shown in collapsed view */}
+                          {(()=>{
+                            const activeAlt = sub.activeAltId&&(sub.alts||[]).find(a=>a.id===sub.activeAltId);
+                            const linkUrl = (activeAlt&&activeAlt.url) || sub.url;
+                            const altName = activeAlt?.name || null;
+                            return(
+                              <div style={{display:"flex",alignItems:"center",gap:6,marginTop:3,flexWrap:"wrap"}}>
+                                {altName&&<span style={{...M,fontSize:10,padding:"1px 7px",borderRadius:8,
+                                  background:"#E6F5EA",color:"#2A6A2A"}}>✓ {altName}</span>}
+                                {linkUrl&&<a href={linkUrl} target="_blank" rel="noreferrer"
+                                  style={{fontSize:10,...M,color:"#8DB5C8",
+                                    overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:240}}>
+                                  🔗 {(()=>{try{return new URL(linkUrl).hostname.replace("www.","")}catch(e){return linkUrl.slice(0,40)}})()}
+                                </a>}
+                              </div>
+                            );
+                          })()}
                           {sub.comment&&<div style={{fontSize:12,color:"#7A6A52",marginTop:3,fontStyle:"italic"}}>{sub.comment}</div>}
                           {/* Compact amounts when collapsed — from active alt or planned */}
                           {!isSubOpen&&(()=>{
@@ -1271,11 +1289,16 @@ function App(){
                                               onClick={()=>setEditAlt(isEditing?null:{catId:cat.id,subId:sub.id,altId:alt.id})}>
                                               ✏️
                                             </button>
-                                            <button className="icon-btn" style={{fontSize:12,color:"#C8A0A0"}}
+                                            <button className="icon-btn" style={{fontSize:12,opacity:.6}} title="Дублировать"
                                               onClick={()=>{
+                                                const copy={...alt,id:uid(),name:alt.name+" (копия)",paid:""};
+                                                updSub(cat.id,sub.id,{alts:[...(sub.alts||[]),copy]});
+                                              }}>⧉</button>
+                                            <button className="icon-btn" style={{fontSize:12,color:"#C8A0A0"}}
+                                              onClick={()=>setDeleteModal({msg:`Удалить вариант «${alt.name}»?`,onConfirm:()=>{
                                                 removeAlt(cat.id,sub.id,alt.id);
                                                 if(sub.activeAltId===alt.id) updSub(cat.id,sub.id,{activeAltId:null});
-                                              }}>✕</button>
+                                              }})}>✕</button>
                                           </div>
                                         )}
                                         {IS_VIEWER&&isActive&&(
@@ -1288,27 +1311,55 @@ function App(){
                                       <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:isEditing?8:4}}>
                                         {isEditing ? <>
                                           <label style={{display:"flex",alignItems:"center",gap:4}}>
-                                            <span style={{...M,fontSize:9,color:"#5A9AB8"}}>ПОДОБРАНО</span>
+                                            <span style={{...M,fontSize:9,color:"#5A9AB8"}}>ЦЕНА ЗА ЕД.</span>
+                                            <input type="number" value={alt.unitPrice||""} placeholder="0"
+                                              onChange={e=>{
+                                                const up=toNum(e.target.value);
+                                                const qty=toNum(alt.qty)||1;
+                                                updateAlt({unitPrice:e.target.value, price:up>0?String(up*qty):alt.price});
+                                              }} style={{width:85,textAlign:"left"}}/>
+                                          </label>
+                                          <label style={{display:"flex",alignItems:"center",gap:4}}>
+                                            <span style={{...M,fontSize:9,color:"#5A9AB8"}}>КОЛ-ВО</span>
+                                            <input type="number" value={alt.qty||1} placeholder="1" min="1"
+                                              onChange={e=>{
+                                                const qty=Math.max(1,toNum(e.target.value)||1);
+                                                const up=toNum(alt.unitPrice);
+                                                updateAlt({qty:String(qty), price:up>0?String(up*qty):alt.price});
+                                              }} style={{width:55,textAlign:"left"}}/>
+                                          </label>
+                                          <label style={{display:"flex",alignItems:"center",gap:4}}>
+                                            <span style={{...M,fontSize:9,color:"#5A9AB8"}}>ИТОГО</span>
                                             <input type="number" value={alt.price||""} placeholder="0"
-                                              onChange={e=>updateAlt({price:e.target.value})} style={{width:85,textAlign:"left"}}/>
+                                              onChange={e=>updateAlt({price:e.target.value,unitPrice:"",qty:""})}
+                                              style={{width:85,textAlign:"left"}}/>
                                           </label>
                                           <label style={{display:"flex",alignItems:"center",gap:4}}>
                                             <span style={{...M,fontSize:9,color:"#4A9A5A"}}>ОПЛАЧЕНО</span>
                                             <input type="number" value={alt.paid||""} placeholder="0"
                                               onChange={e=>updateAlt({paid:e.target.value})} style={{width:85,textAlign:"left"}}/>
                                           </label>
-                                          <label style={{display:"flex",alignItems:"center",gap:4,flex:1,minWidth:120}}>
+                                          <label style={{display:"flex",alignItems:"center",gap:4,flex:1,minWidth:100}}>
                                             <span style={{...M,fontSize:9,color:"#9A8A72"}}>ССЫЛКА</span>
                                             <input type="text" value={alt.url||""} placeholder="https://..."
                                               onChange={e=>updateAlt({url:e.target.value})} style={{flex:1}}/>
                                           </label>
-                                          <label style={{display:"flex",alignItems:"center",gap:4,flex:1,minWidth:120}}>
+                                          <label style={{display:"flex",alignItems:"center",gap:4,flex:1,minWidth:100}}>
                                             <span style={{...M,fontSize:9,color:"#9A8A72"}}>ФОТО URL</span>
                                             <input type="text" value={alt.imageUrl||""} placeholder="https://...jpg"
                                               onChange={e=>updateAlt({imageUrl:e.target.value,imageData:""})} style={{flex:1}}/>
                                           </label>
                                         </> : <>
-                                          {alt.price&&<span style={{...M,fontSize:11,color:"#5A9AB8"}}>подобрано: {Number(alt.price).toLocaleString("ru-RU")} ₽</span>}
+                                          {(()=>{
+                                            const ap=altPrice(alt);
+                                            const up=toNum(alt.unitPrice);
+                                            const qty=toNum(alt.qty)||1;
+                                            return ap>0&&<span style={{...M,fontSize:11,color:"#5A9AB8"}}>
+                                              {up>0&&qty>1
+                                                ? `${Number(up).toLocaleString("ru-RU")} ₽ × ${qty} = ${Number(ap).toLocaleString("ru-RU")} ₽`
+                                                : `подобрано: ${Number(ap).toLocaleString("ru-RU")} ₽`}
+                                            </span>;
+                                          })()}
                                           {alt.paid&&<span style={{...M,fontSize:11,color:"#4A9A5A"}}>оплачено: {Number(alt.paid).toLocaleString("ru-RU")} ₽</span>}
                                           {alt.url&&<a href={alt.url} target="_blank" rel="noreferrer"
                                             style={{...M,fontSize:10,color:"#8DB5C8",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:160}}>
@@ -1347,7 +1398,9 @@ function App(){
                               {/* Row 2: подобрано | оплачено | ссылка | фото url */}
                               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 2fr 2fr",gap:6,marginBottom:6}}>
                                 {[
-                                  {field:"price",    label:"ПОДОБРАНО ₽", ph:"45000",           type:"number"},
+                                  {field:"unitPrice",label:"ЦЕНА ЗА ЕД.", ph:"45000",           type:"number"},
+                                  {field:"qty",      label:"КОЛ-ВО",      ph:"1",               type:"number"},
+                                  {field:"price",    label:"ИТОГО ₽",     ph:"авто",            type:"number"},
                                   {field:"paid",     label:"ОПЛАЧЕНО ₽",  ph:"0",               type:"number"},
                                   {field:"url",      label:"ССЫЛКА",       ph:"https://...",     type:"text"},
                                   {field:"imageUrl", label:"ФОТО URL",     ph:"https://...jpg",  type:"text"},
