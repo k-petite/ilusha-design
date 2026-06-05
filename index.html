@@ -385,7 +385,8 @@ function App(){
   const [addingAlt,setAddingAlt] = useState(null); // subId where inline form is open
   const [newAlt,setNewAlt]       = useState({name:"",url:"",imageUrl:"",imageData:"",price:"",paid:"",comment:""});
   const [newCatModal,setNewCatModal]=useState(false);
-  const [newCat,setNewCat]       = useState({name:"",icon:"📦"});
+  const [newCat,setNewCat]       = useState({name:"",icon:"📦",copyFromId:null});
+  const [editCatId,setEditCatId] = useState(null); // inline edit
   const [filterRoom,setFilterRoom]   = useState("all");
   const [filterStatus,setFilterStatus]=useState("all");
   const [filterCat,setFilterCat]     = useState("all");
@@ -552,7 +553,7 @@ function App(){
   <div style={{background:"#2C2416",color:"#F7F4EF",padding:"22px 18px 0"}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
       <div style={{...M,fontSize:9,letterSpacing:".18em",color:"#C8A97E"}}>БЮДЖЕТ РЕМОНТА</div>
-      <div style={{...M,fontSize:9,color:"#5A4A32",marginLeft:8}}>v2.0</div>
+      <div style={{...M,fontSize:9,color:"#5A4A32",marginLeft:8}}>v2.1</div>
       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
         {saveStatus==="saving"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#FDF5E4",color:"#8A6A12"}}>сохраняю…</span>}
         {saveStatus==="saved"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#E6F5EA",color:"#2A6A2A"}}>✓ сохранено</span>}
@@ -915,18 +916,59 @@ function App(){
         const isCatOpen=openCats[cat.id];
         const cc=calcCat(cat);
         return(
-          <div key={cat.id} style={card}>
+          <div key={cat.id} style={{...card,outline:dragSub&&dragSub.catId!==cat.id?"2px dashed #C8A97E":"none",transition:"outline .15s"}}
+            onDragOver={e=>{if(dragSub&&dragSub.catId!==cat.id){e.preventDefault();}}}
+            onDrop={e=>{
+              if(!dragSub||dragSub.catId===cat.id)return;
+              e.preventDefault();
+              const fromCat=cats.find(c=>c.id===dragSub.catId);
+              const movedSub=fromCat.subs.find(s=>s.id===dragSub.subId);
+              if(!movedSub)return;
+              setCats(p=>p.map(c=>{
+                if(c.id===dragSub.catId) return {...c,subs:c.subs.filter(s=>s.id!==dragSub.subId)};
+                if(c.id===cat.id) return {...c,subs:[...c.subs,movedSub]};
+                return c;
+              }));
+              setDragSub(null);
+            }}>
             {/* Cat header */}
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
-              <button className="exp-btn" onClick={()=>setOpenCats(p=>({...p,[cat.id]:!p[cat.id]}))}>
-                <span style={{fontSize:13}}>{isCatOpen?"▾":"▸"}</span>
-                <span style={{fontSize:16}}>{cat.icon}</span>
-                <span style={{fontSize:15,color:"#2C2416",fontFamily:"'Cormorant Garamond',serif"}}>{cat.name}</span>
-              </button>
-              <div style={{display:"flex",alignItems:"center",gap:8}}>
-                {!IS_VIEWER&&<button className="icon-btn" title="Удалить"
-                  onClick={()=>setDeleteModal({msg:`Удалить категорию «${cat.name}»?`,onConfirm:()=>setCats(p=>p.filter(c=>c.id!==cat.id))})}
-                  style={{fontSize:12,color:"#C8A0A0",opacity:.6}}>🗑</button>}
+              <div style={{display:"flex",alignItems:"center",gap:6,flex:1,minWidth:0}}>
+                <button className="exp-btn" style={{flexShrink:0}}
+                  onClick={()=>setOpenCats(p=>({...p,[cat.id]:!p[cat.id]}))}>
+                  <span style={{fontSize:13}}>{isCatOpen?"▾":"▸"}</span>
+                </button>
+                {!IS_VIEWER&&editCatId===cat.id ? <>
+                  {/* Inline edit: icon picker + name */}
+                  <div style={{display:"flex",alignItems:"center",gap:6,flex:1,flexWrap:"wrap"}}>
+                    <select value={cat.icon}
+                      onChange={e=>setCats(p=>p.map(c=>c.id!==cat.id?c:{...c,icon:e.target.value}))}
+                      style={{fontSize:16,padding:"2px 4px",borderRadius:4,border:"1px solid #C8A97E",
+                        background:"white",cursor:"pointer",width:60}}>
+                      {["🪣","🛋️","🍳","📺","💡","🪞","🚪","🛏️","🚿","🏠","📦","🪑","🖼️","🧹","🔧","🪟","🏗️","🎨","🪴","🛁","🧺","🔑","📐","🪤","🎭","💎","🌿","🛗","🚰","🏮"].map(em=><option key={em} value={em}>{em}</option>)}
+                    </select>
+                    <input type="text" value={cat.name}
+                      onChange={e=>setCats(p=>p.map(c=>c.id!==cat.id?c:{...c,name:e.target.value}))}
+                      style={{fontSize:14,fontFamily:"'Cormorant Garamond',serif",border:"none",
+                        borderBottom:"1px solid #C8A97E",background:"transparent",
+                        flex:1,minWidth:100,color:"#2C2416",padding:"0 0 2px"}}
+                      onBlur={()=>setEditCatId(null)}
+                      autoFocus/>
+                  </div>
+                </> : <>
+                  <span style={{fontSize:16}}>{cat.icon}</span>
+                  <span style={{fontSize:15,color:"#2C2416",fontFamily:"'Cormorant Garamond',serif"}}>{cat.name}</span>
+                </>}
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                {!IS_VIEWER&&<>
+                  <button className="icon-btn" title="Редактировать название"
+                    onClick={()=>setEditCatId(editCatId===cat.id?null:cat.id)}
+                    style={{fontSize:12,opacity:.6}}>✏️</button>
+                  <button className="icon-btn" title="Удалить"
+                    onClick={()=>setDeleteModal({msg:`Удалить категорию «${cat.name}»?`,onConfirm:()=>setCats(p=>p.filter(c=>c.id!==cat.id))})}
+                    style={{fontSize:12,color:"#C8A0A0",opacity:.6}}>🗑</button>
+                </>}
               </div>
             </div>
 
@@ -957,7 +999,7 @@ function App(){
                   return(
                     <div key={sub.id} className="sub-sep"
                       draggable={!IS_VIEWER}
-                      onDragStart={()=>setDragSub({catId:cat.id,subId:sub.id})}
+                      onDragStart={e=>{e.stopPropagation();setDragSub({catId:cat.id,subId:sub.id});}}
                       onDragOver={e=>{e.preventDefault();}}
                       onDrop={()=>{
                         if(!dragSub||dragSub.catId!==cat.id||dragSub.subId===sub.id)return;
@@ -1410,17 +1452,58 @@ function App(){
           <div style={{fontSize:18,fontWeight:300}}>Новая категория</div>
           <button className="icon-btn" style={{fontSize:18}} onClick={()=>setNewCatModal(false)}>✕</button>
         </div>
-        {[{field:"icon",label:"ИКОНКА",ph:"🛋️"},{field:"name",label:"НАЗВАНИЕ *",ph:"Мебель для спальни"}].map(({field,label,ph})=>(
-          <div key={field} style={{marginBottom:10}}>
-            <div style={{...M,fontSize:9,color:"#9A8A72",marginBottom:4}}>{label}</div>
-            <input type="text" placeholder={ph} value={newCat[field]} onChange={e=>setNewCat(p=>({...p,[field]:e.target.value}))} style={{width:"100%"}}/>
+
+        {/* Icon picker */}
+        <div style={{marginBottom:12}}>
+          <div style={{...M,fontSize:9,color:"#9A8A72",marginBottom:6}}>ИКОНКА</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+            {["🪣","🛋️","🍳","📺","💡","🪞","🚪","🛏️","🚿","🏠","📦","🪑","🖼️","🧹","🔧","🪟","🏗️","🎨","🪴","🛁","🧺","🔑","📐","🪤","🎭","💎","🌿","🛗","🚰","🏮"].map(em=>(
+              <button key={em} onClick={()=>setNewCat(p=>({...p,icon:em}))}
+                style={{fontSize:18,padding:"4px 6px",borderRadius:6,cursor:"pointer",border:"none",
+                  background:newCat.icon===em?"#2C2416":"#F5F0E8",
+                  outline:newCat.icon===em?"2px solid #C8A97E":"none"}}>
+                {em}
+              </button>
+            ))}
           </div>
-        ))}
+        </div>
+
+        {/* Name */}
+        <div style={{marginBottom:12}}>
+          <div style={{...M,fontSize:9,color:"#9A8A72",marginBottom:4}}>НАЗВАНИЕ *</div>
+          <input type="text" placeholder="Мебель для спальни" value={newCat.name}
+            onChange={e=>setNewCat(p=>({...p,name:e.target.value}))} style={{width:"100%"}}/>
+        </div>
+
+        {/* Copy from template */}
+        <div style={{marginBottom:16}}>
+          <div style={{...M,fontSize:9,color:"#9A8A72",marginBottom:4}}>СКОПИРОВАТЬ ПОДКАТЕГОРИИ ИЗ</div>
+          <select value={newCat.copyFromId||""}
+            onChange={e=>setNewCat(p=>({...p,copyFromId:e.target.value||null}))}
+            style={{width:"100%",...M,fontSize:11,padding:"5px 8px",borderRadius:4,
+              border:"1px solid #DDD5C4",background:"#FDFAF6",cursor:"pointer"}}>
+            <option value="">— начать с чистого листа</option>
+            {cats.map(c=><option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+          </select>
+          {newCat.copyFromId&&<div style={{...M,fontSize:10,color:"#9A8A72",marginTop:4}}>
+            Подкатегории будут скопированы как шаблон (суммы обнулены)
+          </div>}
+        </div>
+
         <button onClick={()=>{
           if(!newCat.name)return;
-          setCats(p=>[...p,{id:uid(),name:newCat.name,icon:newCat.icon||"📦",color:"#B8C8A8",subs:[mk("Новая подкатегория",0)]}]);
-          setNewCat({name:"",icon:"📦"});setNewCatModal(false);
-        }} style={{width:"100%",background:"#2C2416",color:"#F7F4EF",border:"none",padding:"10px",borderRadius:5,cursor:"pointer",...M,fontSize:11,marginTop:6}}>
+          let subs;
+          if(newCat.copyFromId){
+            const src=cats.find(c=>c.id===newCat.copyFromId);
+            subs=src?(src.subs||[]).map(s=>({...mk(s.name,0),name:s.name,roomIds:s.roomIds||[]})):[mk("Новая подкатегория",0)];
+          } else {
+            subs=[mk("Новая подкатегория",0)];
+          }
+          setCats(p=>[...p,{id:uid(),name:newCat.name,icon:newCat.icon||"📦",color:"#B8C8A8",subs}]);
+          setNewCat({name:"",icon:"📦",copyFromId:null});
+          setNewCatModal(false);
+        }} style={{width:"100%",background:"#2C2416",color:"#F7F4EF",border:"none",padding:"10px",
+          borderRadius:5,cursor:"pointer",...M,fontSize:11}}>
           СОЗДАТЬ
         </button>
       </div>
