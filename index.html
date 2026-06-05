@@ -343,6 +343,26 @@ function RoomPicker({roomIds, onChange}){
   );
 }
 
+// ── COLLAPSIBLE COMMENT ──
+function AltComment({comment, M}){
+  const [open,setOpen]=useState(false);
+  if(!comment) return null;
+  const short = comment.length>80 && !open;
+  return(
+    <div style={{fontSize:11,color:"#7A6A52",fontStyle:"italic",marginTop:2}}>
+      {short ? comment.slice(0,80)+"…" : comment}
+      {comment.length>80&&(
+        <button onClick={()=>setOpen(!open)}
+          style={{background:"none",border:"none",cursor:"pointer",
+            color:"#C8A97E",fontSize:10,marginLeft:4,padding:0,fontStyle:"normal",
+            fontFamily:"'DM Mono',monospace"}}>
+          {open?"свернуть":"ещё +"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ── ILUSHA METER ──
 function IlushaMeter({card,M}){
   const [ilusha,setIlusha]=useState(42);
@@ -1352,28 +1372,24 @@ function App(){
                                               {up>0&&<span style={{...M,fontSize:11,color:"#5A9AB8"}}>
                                                 цена/ед.: {Number(up).toLocaleString("ru-RU")} ₽
                                               </span>}
-                                              {qty>1&&<span style={{...M,fontSize:11,color:"#5A9AB8"}}>
+                                              <span style={{...M,fontSize:11,color:"#5A9AB8"}}>
                                                 кол-во: {qty}
-                                              </span>}
+                                              </span>
                                               <span style={{...M,fontSize:11,color:"#5A9AB8",fontWeight:up>0&&qty>1?500:400}}>
-                                                {up>0&&qty>1
+                                                {up>0
                                                   ? `итого: ${Number(ap).toLocaleString("ru-RU")} ₽`
                                                   : ap>0?`подобрано: ${Number(ap).toLocaleString("ru-RU")} ₽`:"подобрано: —"}
                                               </span>
                                               {alt.paid&&<span style={{...M,fontSize:11,color:"#4A9A5A"}}>
                                                 оплачено: {Number(alt.paid).toLocaleString("ru-RU")} ₽
                                               </span>}
-                                            </div>
-                                            {/* Links row */}
-                                            <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
                                               {alt.url&&<a href={alt.url} target="_blank" rel="noreferrer"
                                                 style={{...M,fontSize:10,color:"#8DB5C8",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:220}}>
                                                 🔗 {(()=>{try{return new URL(alt.url).hostname.replace("www.","")}catch(e){return alt.url.slice(0,30)}})()}
                                               </a>}
-                                              {alt.imageUrl&&<span style={{...M,fontSize:9,color:"#9A8A72",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:180}}>
-                                                🖼 {(()=>{try{return new URL(alt.imageUrl).hostname.replace("www.","")}catch(e){return alt.imageUrl.slice(0,25)}})()}
-                                              </span>}
                                             </div>
+                                            {/* Comment — collapsible */}
+                                            {alt.comment&&<AltComment comment={alt.comment} M={M}/>}
                                           </div>
                                         );
                                       })()}
@@ -1384,7 +1400,7 @@ function App(){
                                             onChange={e=>updateAlt({comment:e.target.value})}
                                             onInput={e=>{e.target.style.height="auto";e.target.style.height=e.target.scrollHeight+"px";}}
                                             style={{width:"100%",resize:"vertical",minHeight:32,marginTop:4}}/>
-                                        : alt.comment&&<div style={{fontSize:11,color:"#7A6A52",fontStyle:"italic",marginTop:4}}>{alt.comment}</div>
+                                        : <AltComment comment={alt.comment||""} M={M}/>
                                       }
                                     </div>
                                   </div>
