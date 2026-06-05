@@ -11,7 +11,7 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
   import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
   const firebaseConfig = {
-    apiKey: "AIzaSyBJqYB-ymSu5dw8kmB8iDGTzTDDArAeg_U",
+    apiKey: "AIzaSyDwzk5Z9eiSlPjdAz2dFIh9KajFr6ctSoY",
     authDomain: "ilusha-design.firebaseapp.com",
     databaseURL: "https://ilusha-design-default-rtdb.europe-west1.firebasedatabase.app",
     projectId: "ilusha-design",
@@ -138,6 +138,7 @@ const altPrice = a => {
   const up = toNum(a.unitPrice);
   const qty = toNum(a.qty)||1;
   if(up>0) return up*qty;
+  // legacy: price field (before unitPrice was introduced)
   return toNum(a.price);
 };
 
@@ -573,7 +574,7 @@ function App(){
   <div style={{background:"#2C2416",color:"#F7F4EF",padding:"22px 18px 0"}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
       <div style={{...M,fontSize:9,letterSpacing:".18em",color:"#C8A97E"}}>БЮДЖЕТ РЕМОНТА</div>
-      <div style={{...M,fontSize:9,color:"#5A4A32",marginLeft:8}}>v2.3</div>
+      <div style={{...M,fontSize:9,color:"#5A4A32",marginLeft:8}}>v2.4</div>
       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
         {saveStatus==="saving"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#FDF5E4",color:"#8A6A12"}}>сохраняю…</span>}
         {saveStatus==="saved"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#E6F5EA",color:"#2A6A2A"}}>✓ сохранено</span>}
@@ -1316,8 +1317,8 @@ function App(){
                                               onChange={e=>{
                                                 const up=toNum(e.target.value);
                                                 const qty=toNum(alt.qty)||1;
-                                                updateAlt({unitPrice:e.target.value, price:up>0?String(up*qty):alt.price});
-                                              }} style={{width:85,textAlign:"left"}}/>
+                                                updateAlt({unitPrice:e.target.value, price:up>0?String(up*qty):""});
+                                              }} style={{width:90,textAlign:"left"}}/>
                                           </label>
                                           <label style={{display:"flex",alignItems:"center",gap:4}}>
                                             <span style={{...M,fontSize:9,color:"#5A9AB8"}}>КОЛ-ВО</span>
@@ -1325,15 +1326,20 @@ function App(){
                                               onChange={e=>{
                                                 const qty=Math.max(1,toNum(e.target.value)||1);
                                                 const up=toNum(alt.unitPrice);
-                                                updateAlt({qty:String(qty), price:up>0?String(up*qty):alt.price});
-                                              }} style={{width:55,textAlign:"left"}}/>
+                                                updateAlt({qty:String(qty), price:up>0?String(up*qty):""});
+                                              }} style={{width:60,textAlign:"left"}}/>
                                           </label>
-                                          <label style={{display:"flex",alignItems:"center",gap:4}}>
+                                          {/* ИТОГО — readonly, computed */}
+                                          <div style={{display:"flex",alignItems:"center",gap:4}}>
                                             <span style={{...M,fontSize:9,color:"#5A9AB8"}}>ИТОГО</span>
-                                            <input type="number" value={alt.price||""} placeholder="0"
-                                              onChange={e=>updateAlt({price:e.target.value,unitPrice:"",qty:""})}
-                                              style={{width:85,textAlign:"left"}}/>
-                                          </label>
+                                            <div style={{...M,fontSize:11,color:"#5A9AB8",
+                                              background:"#EDF4FA",border:"1px solid #C8D8E8",
+                                              borderRadius:3,padding:"4px 8px",minWidth:80,textAlign:"right"}}>
+                                              {toNum(alt.unitPrice)>0
+                                                ? (toNum(alt.unitPrice)*(toNum(alt.qty)||1)).toLocaleString("ru-RU")+" ₽"
+                                                : "—"}
+                                            </div>
+                                          </div>
                                           <label style={{display:"flex",alignItems:"center",gap:4}}>
                                             <span style={{...M,fontSize:9,color:"#4A9A5A"}}>ОПЛАЧЕНО</span>
                                             <input type="number" value={alt.paid||""} placeholder="0"
@@ -1400,7 +1406,7 @@ function App(){
                                 {[
                                   {field:"unitPrice",label:"ЦЕНА ЗА ЕД.", ph:"45000",           type:"number"},
                                   {field:"qty",      label:"КОЛ-ВО",      ph:"1",               type:"number"},
-                                  {field:"price",    label:"ИТОГО ₽",     ph:"авто",            type:"number"},
+
                                   {field:"paid",     label:"ОПЛАЧЕНО ₽",  ph:"0",               type:"number"},
                                   {field:"url",      label:"ССЫЛКА",       ph:"https://...",     type:"text"},
                                   {field:"imageUrl", label:"ФОТО URL",     ph:"https://...jpg",  type:"text"},
