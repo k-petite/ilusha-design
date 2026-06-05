@@ -1346,20 +1346,34 @@ function App(){
                                             </label>
                                           </div>
                                         ) : (
-                                          <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center",marginBottom:4}}>
-                                            <span style={{...M,fontSize:11,color:"#5A9AB8"}}>
-                                              {up>0&&qty>1
-                                                ? `${Number(up).toLocaleString("ru-RU")} ₽ × ${qty} = ${Number(ap).toLocaleString("ru-RU")} ₽`
-                                                : ap>0?`подобрано: ${Number(ap).toLocaleString("ru-RU")} ₽`:"подобрано: —"}
-                                            </span>
-                                            {alt.paid&&<span style={{...M,fontSize:11,color:"#4A9A5A"}}>оплачено: {Number(alt.paid).toLocaleString("ru-RU")} ₽</span>}
-                                            {alt.url&&<a href={alt.url} target="_blank" rel="noreferrer"
-                                              style={{...M,fontSize:10,color:"#8DB5C8",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:180}}>
-                                              🔗 {(()=>{try{return new URL(alt.url).hostname.replace("www.","")}catch(e){return alt.url.slice(0,25)}})()}
-                                            </a>}
-                                            {alt.imageUrl&&<span style={{...M,fontSize:9,color:"#9A8A72",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:120}}>
-                                              🖼 {(()=>{try{return new URL(alt.imageUrl).hostname.replace("www.","")}catch(e){return alt.imageUrl.slice(0,20)}})()}
-                                            </span>}
+                                          <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:4}}>
+                                            {/* Prices row */}
+                                            <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
+                                              {up>0&&<span style={{...M,fontSize:11,color:"#5A9AB8"}}>
+                                                цена/ед.: {Number(up).toLocaleString("ru-RU")} ₽
+                                              </span>}
+                                              {qty>1&&<span style={{...M,fontSize:11,color:"#5A9AB8"}}>
+                                                кол-во: {qty}
+                                              </span>}
+                                              <span style={{...M,fontSize:11,color:"#5A9AB8",fontWeight:up>0&&qty>1?500:400}}>
+                                                {up>0&&qty>1
+                                                  ? `итого: ${Number(ap).toLocaleString("ru-RU")} ₽`
+                                                  : ap>0?`подобрано: ${Number(ap).toLocaleString("ru-RU")} ₽`:"подобрано: —"}
+                                              </span>
+                                              {alt.paid&&<span style={{...M,fontSize:11,color:"#4A9A5A"}}>
+                                                оплачено: {Number(alt.paid).toLocaleString("ru-RU")} ₽
+                                              </span>}
+                                            </div>
+                                            {/* Links row */}
+                                            <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
+                                              {alt.url&&<a href={alt.url} target="_blank" rel="noreferrer"
+                                                style={{...M,fontSize:10,color:"#8DB5C8",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:220}}>
+                                                🔗 {(()=>{try{return new URL(alt.url).hostname.replace("www.","")}catch(e){return alt.url.slice(0,30)}})()}
+                                              </a>}
+                                              {alt.imageUrl&&<span style={{...M,fontSize:9,color:"#9A8A72",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:180}}>
+                                                🖼 {(()=>{try{return new URL(alt.imageUrl).hostname.replace("www.","")}catch(e){return alt.imageUrl.slice(0,25)}})()}
+                                              </span>}
+                                            </div>
                                           </div>
                                         );
                                       })()}
