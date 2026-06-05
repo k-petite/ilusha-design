@@ -64,7 +64,7 @@ const ROOMS = [
   { id:"entry",     label:"Прихожая",    icon:"🚪" },
   { id:"living",    label:"Гостиная",    icon:"🛋️" },
   { id:"bedroom",   label:"Спальня",     icon:"🛏️" },
-  { id:"kitchen",   label:"Кухня",       icon:"🍳" },
+  { id:"kitchen", limit:142605,   label:"Кухня",       icon:"🍳" },
   { id:"bathroom",  label:"Санузел",     icon:"🚿" },
   { id:"wardrobe",  label:"Гардеробная", icon:"👗" },
   { id:"balcony",   label:"Балкон",      icon:"🌿" },
@@ -79,29 +79,29 @@ const mk = (name, planned=0) => ({
 });
 
 const DEFAULT_CATS = [
-  { id:"finish",     name:"Чистовая отделка",    icon:"🪣", color:"#8DB5C8",
+  { id:"finish", limit:450000,     name:"Чистовая отделка",    icon:"🪣", color:"#8DB5C8",
     subs:[ mk("Инженерная доска / паркет",254900), mk("Керамогранит",127600),
            mk("Краска (стены + потолок)",59100), mk("Декоративная штукатурка",9400),
            mk("Плинтусы",13700), mk("Затирка и лак",3000), mk("Доставка материалов",20300) ] },
-  { id:"furniture",  name:"Мебель",               icon:"🛋️", color:"#B8A3C8",
+  { id:"furniture", limit:199288,  name:"Мебель",               icon:"🛋️", color:"#B8A3C8",
     subs:[ mk("Диван",100000), mk("Матрас",65000), mk("Тумба под TV",14400),
            mk("Барная стойка (на заказ)",60900), mk("Стулья барные (×2)",0),
            mk("Журнальный столик",29100), mk("Полка для обуви + вешалка",7300), mk("Сборка и доставка",14200) ] },
-  { id:"kitchen",    name:"Кухня на заказ",        icon:"🍳", color:"#A3C8B8",
+  { id:"kitchen", limit:142605,    name:"Кухня на заказ",        icon:"🍳", color:"#A3C8B8",
     subs:[ mk("Корпусная кухня (на заказ)",316800), mk("Столешница искусственный камень",134500),
            mk("Смеситель кухонный",11300), mk("Диспенсер + арматура мойки",9300),
            mk("Монтаж и доставка кухни",28100) ] },
-  { id:"appliances", name:"Бытовая техника",       icon:"📺", color:"#C8C0A3",
+  { id:"appliances", limit:217874, name:"Бытовая техника",       icon:"📺", color:"#C8C0A3",
     subs:[ mk("Телевизор 70\"",39400), mk("Холодильник встраиваемый",35100),
            mk("Стиральная машина",30500), mk("Духовой шкаф",44100), mk("Варочная панель",8000),
            mk("Чайник + тостер",21200), mk("Умные колонки (×2)",24600),
            mk("Пылесос + отпариватель",3300), mk("Роутер Wi-Fi",2700) ] },
-  { id:"lighting",   name:"Свет и электрика",      icon:"💡", color:"#D4C87E",
+  { id:"lighting", limit:105289,   name:"Свет и электрика",      icon:"💡", color:"#D4C87E",
     subs:[ mk("Светильники потолочные (с/у, кухня, коридор)",53500),
            mk("Светильники встраиваемые (гостиная)",30800), mk("Светодиодная лента RGB",32900),
            mk("Розетки и выключатели Donel R98",25300), mk("Торшер напольный",0),
            mk("Лампы настольные",30500), mk("Доставка",900) ] },
-  { id:"decor",      name:"Декор, текстиль, С/У",  icon:"🪞", color:"#C8A97E",
+  { id:"decor", limit:384944,      name:"Декор, текстиль, С/У",  icon:"🪞", color:"#C8A97E",
     subs:[ mk("Ванна",16000), mk("Унитаз + инсталляция",13900),
            mk("Раковина + столешница С/У",9100), mk("Смесители С/У",6300),
            mk("Полотенцесушитель + аксессуары С/У",3700), mk("Климат-контроль",18300),
@@ -182,7 +182,9 @@ function calcCat(cat) {
   const paid       = subs.reduce((s,x)=>s+toNum(subPaid(x)), 0);
   const actualSum  = subs.reduce((s,x)=>s+actual(x), 0);
   const delta      = actualSum - planned;
-  return { planned, selected, paid, actualSum, delta };
+  const limit      = toNum(cat.limit) || 0;
+  const overLimit  = limit > 0 ? actualSum - limit : 0;
+  return { planned, selected, paid, actualSum, delta, limit, overLimit };
 }
 
 function calcProject(cats, roughData) {
@@ -424,6 +426,7 @@ function App(){
   const [openRough,setOpenRough] = useState({});
   const [editAlt,setEditAlt]     = useState(null);
   const [dragSub,setDragSub]     = useState(null); // {catId,subId}
+  const [dragAlt,setDragAlt]     = useState(null); // {catId,subId,altId}
   const [addingAlt,setAddingAlt] = useState(null); // subId where inline form is open
   const [newAlt,setNewAlt]       = useState({name:"",url:"",imageUrl:"",imageData:"",price:"",paid:"",comment:""});
   const [newCatModal,setNewCatModal]=useState(false);
@@ -595,7 +598,7 @@ function App(){
   <div style={{background:"#2C2416",color:"#F7F4EF",padding:"22px 18px 0"}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
       <div style={{...M,fontSize:9,letterSpacing:".18em",color:"#C8A97E"}}>БЮДЖЕТ РЕМОНТА</div>
-      <div style={{...M,fontSize:9,color:"#5A4A32",marginLeft:8}}>v2.5</div>
+      <div style={{...M,fontSize:9,color:"#5A4A32",marginLeft:8}}>v2.7</div>
       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
         {saveStatus==="saving"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#FDF5E4",color:"#8A6A12"}}>сохраняю…</span>}
         {saveStatus==="saved"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#E6F5EA",color:"#2A6A2A"}}>✓ сохранено</span>}
@@ -748,7 +751,79 @@ function App(){
       {/* 🎉 ILUSHA METER */}
       <IlushaMeter card={card} M={M}/>
 
-      <div style={{...card,background:"#FDF5E4",border:"1px solid #E8D8A0"}}>
+      {/* BUDGET LIMITS BY CATEGORY */}
+      <div style={card}>
+        <div style={{...M,fontSize:10,color:"#9A8A72",letterSpacing:".1em",marginBottom:14}}>ЛИМИТЫ ПО КАТЕГОРИЯМ (OPTIMA)</div>
+        {cats.map(cat=>{
+          const cc=calcCat(cat);
+          if(!cc.limit) return null;
+          const usedPct=Math.min(100,Math.round(cc.actualSum/cc.limit*100));
+          const over=cc.overLimit>0;
+          const planPct=Math.min(100,Math.round(cc.planned/cc.limit*100));
+          const barColor=over?"#E8937A":usedPct>85?"#D4C87E":"#4A9A5A";
+          return(
+            <div key={cat.id} style={{marginBottom:14}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:5}}>
+                <div style={{display:"flex",alignItems:"center",gap:6,flex:1}}>
+                  <span style={{fontSize:14}}>{cat.icon} {cat.name}</span>
+                  {over&&<span style={{...M,fontSize:10,padding:"1px 7px",borderRadius:8,background:"#FAE0D4",color:"#8A2A1A"}}>
+                    🔴 +{fmt(cc.overLimit)}
+                  </span>}
+                  {!over&&cc.limit>0&&cc.actualSum<cc.limit&&cc.actualSum>0&&(
+                    <span style={{...M,fontSize:10,padding:"1px 7px",borderRadius:8,background:"#D4F0D4",color:"#1A6A1A"}}>
+                      🟢 -{fmt(cc.limit-cc.actualSum)}
+                    </span>
+                  )}
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  {!IS_VIEWER&&(
+                    <div style={{display:"flex",alignItems:"center",gap:3}}>
+                      <span style={{...M,fontSize:9,color:"#9A8A72"}}>лимит:</span>
+                      <input type="number" value={cat.limit||""}
+                        onChange={e=>setCats(p=>p.map(c=>c.id!==cat.id?c:{...c,limit:toNum(e.target.value)}))}
+                        style={{width:80,textAlign:"right",...M,fontSize:10}}/>
+                    </div>
+                  )}
+                  <div style={{textAlign:"right"}}>
+                    <div style={{...M,fontSize:12}}>
+                      <span style={{color:over?"#C05030":"#2C2416"}}>{fmt(cc.actualSum)}</span>
+                      <span style={{color:"#9A8A72"}}> / {fmt(cc.limit)}</span>
+                    </div>
+                    <div style={{...M,fontSize:10,color:"#9A8A72"}}>
+                      план {fmt(cc.planned)} · {usedPct}%
+                    </div>
+                  </div>
+                </div>
+              </div>
+              {/* Bar: planned (light) + actual (solid) vs limit */}
+              <div style={{height:8,background:"#EDE7DC",borderRadius:4,overflow:"hidden",position:"relative"}}>
+                {/* Planned fill (light) */}
+                <div style={{position:"absolute",left:0,top:0,height:"100%",
+                  width:`${planPct}%`,background:cat.color,opacity:.3,borderRadius:4}}/>
+                {/* Actual fill (solid) */}
+                <div style={{position:"absolute",left:0,top:0,height:"100%",
+                  width:`${usedPct}%`,background:barColor,borderRadius:4,transition:"width .4s"}}/>
+              </div>
+              {/* Sub-items with overrun */}
+              {cat.subs.filter(s=>{
+                const a=actual(s); return cc.limit>0 && a>toNum(s.planned) && toNum(s.planned)>0;
+              }).map(s=>(
+                <div key={s.id} style={{...M,fontSize:10,color:"#8A2A1A",marginTop:3,paddingLeft:8}}>
+                  ↳ {s.name}: план {fmt(toNum(s.planned))}, факт {fmt(actual(s))} (+{fmt(actual(s)-toNum(s.planned))})
+                </div>
+              ))}
+            </div>
+          );
+        })}
+        <div style={{paddingTop:10,borderTop:"1px solid #EDE7DC",display:"flex",justifyContent:"space-between"}}>
+          <span style={{...M,fontSize:11,color:"#7A6A52"}}>Итого по лимитам OPTIMA</span>
+          <span style={{...M,fontSize:13}}>
+            {fmt(cats.reduce((s,c)=>s+(calcCat(c).limit||0),0))}
+          </span>
+        </div>
+      </div>
+
+            <div style={{...card,background:"#FDF5E4",border:"1px solid #E8D8A0"}}>
         <div style={{...M,fontSize:10,color:"#7A5A12",marginBottom:8}}>⚠ КЛЮЧЕВЫЕ МОМЕНТЫ</div>
         <ul style={{paddingLeft:16,fontSize:13,lineHeight:1.9,color:"#5A4A22"}}>
           <li>Потолки — заложено <b>100 000 ₽</b> в черновой. ⚠ Уточнить у подрядчика</li>
@@ -1028,6 +1103,18 @@ function App(){
             </div>
 
             {/* Cat totals row */}
+            {cc.limit>0&&(
+              <div style={{...M,fontSize:10,marginBottom:6,display:"flex",alignItems:"center",gap:8}}>
+                <span style={{color:"#9A8A72",flexShrink:0}}>Лимит: {fmt(cc.limit)}</span>
+                <div style={{flex:1,height:4,background:"#EDE7DC",borderRadius:2,overflow:"hidden"}}>
+                  <div style={{width:`${Math.min(100,Math.round(cc.actualSum/cc.limit*100))}%`,
+                    height:"100%",background:cc.overLimit>0?"#E8937A":"#4A9A5A",borderRadius:2,transition:"width .4s"}}/>
+                </div>
+                <span style={{color:cc.overLimit>0?"#C05030":"#4A9A5A",flexShrink:0}}>
+                  {cc.overLimit>0?`🔴 +${fmt(cc.overLimit)}`:fmt(cc.limit-cc.actualSum)+" свободно"}
+                </span>
+              </div>
+            )}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6,marginBottom:isCatOpen?12:0}}>
               {[
                 {l:"Запланировано", v:cc.planned,    bg:"#F5F0E4", c:"#7A6A52"},
@@ -1122,6 +1209,16 @@ function App(){
                               {!IS_VIEWER&&<button className="icon-btn" title="Удалить"
                                 onClick={e=>{e.stopPropagation();setDeleteModal({msg:`Удалить позицию «${sub.name}»?`,onConfirm:()=>setCats(p=>p.map(c=>c.id!==cat.id?c:{...c,subs:c.subs.filter(s=>s.id!==sub.id)}))});}}
                                 style={{fontSize:11,color:"#C8A0A0",opacity:.6}}>🗑</button>}
+                              {!IS_VIEWER&&<button className="icon-btn" title="Дублировать позицию"
+                                onClick={e=>{e.stopPropagation();
+                                  const copy={...sub,id:uid(),name:sub.name+" (копия)",
+                                    selected:0,paid:0,activeAltId:null,
+                                    alts:(sub.alts||[]).map(a=>({...a,id:uid(),paid:""}))};
+                                  setCats(p=>p.map(c=>c.id!==cat.id?c:{...c,
+                                    subs:[...c.subs.slice(0,c.subs.findIndex(s=>s.id===sub.id)+1),
+                                      copy,...c.subs.slice(c.subs.findIndex(s=>s.id===sub.id)+1)]}));
+                                }}
+                                style={{fontSize:11,opacity:.6}}>⧉</button>}
                             </div>
                           </div>
                           {/* Active alt URL + name — shown in collapsed view */}
@@ -1251,12 +1348,54 @@ function App(){
                               });
 
                               return(
-                                <div key={alt.id} style={{
-                                  borderRadius:8,marginBottom:8,overflow:"hidden",
-                                  border:isActive?"2px solid #4A9A5A":"1px solid #DDD5C4",
-                                  background:isActive?"#F0F8F2":"white",
-                                  transition:"border-color .2s,background .2s"
-                                }}>
+                                <div key={alt.id}
+                                  draggable={!IS_VIEWER}
+                                  onDragStart={e=>{e.stopPropagation();setDragAlt({catId:cat.id,subId:sub.id,altId:alt.id});}}
+                                  onDragOver={e=>{if(dragAlt&&dragAlt.altId!==alt.id){e.preventDefault();e.currentTarget.style.outline="2px dashed #C8A97E";}}}
+                                  onDragLeave={e=>e.currentTarget.style.outline="none"}
+                                  onDrop={e=>{
+                                    e.currentTarget.style.outline="none";
+                                    if(!dragAlt||dragAlt.altId===alt.id)return;
+                                    e.preventDefault();
+                                    // Move alt from source sub to this sub (before this alt)
+                                    const srcCat=cats.find(c=>c.id===dragAlt.catId);
+                                    if(!srcCat)return;
+                                    const srcSub=srcCat.subs.find(s=>s.id===dragAlt.subId);
+                                    if(!srcSub)return;
+                                    const movedAlt=srcSub.alts.find(a=>a.id===dragAlt.altId);
+                                    if(!movedAlt)return;
+                                    setCats(p=>p.map(c=>{
+                                      // Remove from source
+                                      if(c.id===dragAlt.catId){
+                                        return {...c,subs:c.subs.map(s=>s.id!==dragAlt.subId?s:{
+                                          ...s,alts:s.alts.filter(a=>a.id!==dragAlt.altId),
+                                          activeAltId:s.activeAltId===dragAlt.altId?null:s.activeAltId
+                                        })};
+                                      }
+                                      return c;
+                                    }));
+                                    // Add to target sub (same or different)
+                                    const targetSubId=sub.id;
+                                    const targetCatId=cat.id;
+                                    setCats(p=>p.map(c=>{
+                                      if(c.id!==targetCatId)return c;
+                                      return {...c,subs:c.subs.map(s=>{
+                                        if(s.id!==targetSubId)return s;
+                                        const idx=s.alts.findIndex(a=>a.id===alt.id);
+                                        const newAlts=[...s.alts];
+                                        newAlts.splice(idx,0,movedAlt);
+                                        return {...s,alts:newAlts};
+                                      })};
+                                    }));
+                                    setDragAlt(null);
+                                  }}
+                                  style={{
+                                    borderRadius:8,marginBottom:8,overflow:"hidden",
+                                    border:isActive?"2px solid #4A9A5A":"1px solid #DDD5C4",
+                                    background:isActive?"#F0F8F2":"white",
+                                    transition:"border-color .2s,background .2s",
+                                    opacity:dragAlt&&dragAlt.altId===alt.id?.5:1
+                                  }}>
                                   <div style={{display:"flex",alignItems:"flex-start"}}>
 
                                     {/* Left: image block */}
@@ -1335,9 +1474,9 @@ function App(){
                                             </label>
                                             <label style={{display:"flex",alignItems:"center",gap:3,flexShrink:0}}>
                                               <span style={{...M,fontSize:9,color:"#5A9AB8",whiteSpace:"nowrap"}}>КОЛ-ВО</span>
-                                              <input type="number" value={alt.qty||1} placeholder="1" min="1"
+                                              <input type="number" value={alt.qty||1} placeholder="1" min="0.1" step="0.1"
                                                 onChange={e=>{
-                                                  const qty=Math.max(1,toNum(e.target.value)||1);
+                                                  const qty=Math.max(0.1,toNum(e.target.value)||1);
                                                   const up=toNum(alt.unitPrice);
                                                   updateAlt({qty:String(qty),price:up>0?String(up*qty):""});
                                                 }} style={{width:65,textAlign:"left"}}/>
@@ -1433,9 +1572,9 @@ function App(){
                                 </div>
                                 <div style={{flexShrink:0}}>
                                   <div style={{...M,fontSize:9,color:"#5A9AB8",marginBottom:2}}>КОЛ-ВО</div>
-                                  <input type="number" placeholder="1" value={newAlt.qty||1} min="1"
+                                  <input type="number" placeholder="1" value={newAlt.qty||1} min="0.1" step="0.1"
                                     onChange={e=>{
-                                      const qty=Math.max(1,toNum(e.target.value)||1);
+                                      const qty=Math.max(0.1,Math.round(toNum(e.target.value)*10)/10||1);
                                       const up=toNum(newAlt.unitPrice);
                                       setNewAlt(p=>({...p,qty:String(qty),price:up>0?String(up*qty):""}));
                                     }} style={{width:65,textAlign:"left"}}/>
