@@ -322,6 +322,41 @@ function RoomPicker({roomIds, onChange}){
   );
 }
 
+// ── ILUSHA METER ──
+function IlushaMeter({card,M}){
+  const [ilusha,setIlusha]=useState(42);
+  const labels=[
+    [0,15,"Точно сдаст/продаст 📦"],
+    [15,35,"Скорее всего сдаст..."],
+    [35,55,"Ещё не решил 🤔"],
+    [55,75,"Начинает привыкать 🛋️"],
+    [75,90,"Уже купил кота 🐱"],
+    [90,101,"Будет жить сам! 🎊"],
+  ];
+  const label=labels.find(([a,b])=>ilusha>=a&&ilusha<b)?.[2]||"";
+  const barColor=ilusha<35?"#E8937A":ilusha<65?"#D4C87E":"#4A9A5A";
+  return(
+    <div style={{...card,background:"#2C2416",color:"#F7F4EF",overflow:"hidden"}}>
+      <div style={{...M,fontSize:10,letterSpacing:".12em",color:"#C8A97E",marginBottom:8}}>🏠 БАРОМЕТР ИЛЮШИ</div>
+      <div style={{display:"flex",justifyContent:"space-between",...M,fontSize:10,color:"#8A7A62",marginBottom:8}}>
+        <span>← сдаст/продаст</span><span>будет жить сам →</span>
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:8}}>
+        <div style={{flex:1,height:24,background:"#3C3426",borderRadius:12,overflow:"hidden",position:"relative"}}>
+          <div style={{width:`${ilusha}%`,height:"100%",background:barColor,borderRadius:12,transition:"width .3s,background .3s"}}/>
+          <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",
+            ...M,fontSize:12,color:"#F7F4EF"}}>{ilusha}%</div>
+        </div>
+        <div style={{fontSize:20}}>{ilusha<35?"😬":ilusha<65?"😐":ilusha<85?"😊":"🥳"}</div>
+      </div>
+      <input type="range" min={0} max={100} value={ilusha}
+        onChange={e=>setIlusha(+e.target.value)}
+        style={{width:"100%",accentColor:barColor,marginBottom:8}}/>
+      <div style={{...M,fontSize:12,color:"#C8B89A",textAlign:"center",minHeight:18}}>{label}</div>
+    </div>
+  );
+}
+
 // ── MAIN APP ──
 function App(){
   const [cats,setCats]           = useState(null);
@@ -652,46 +687,7 @@ function App(){
       </div>
 
       {/* 🎉 ILUSHA METER */}
-      <div style={{...card,background:"#2C2416",color:"#F7F4EF",overflow:"hidden",position:"relative"}}>
-        <div style={{...M,fontSize:10,letterSpacing:".12em",color:"#C8A97E",marginBottom:8}}>
-          🏠 БАРОМЕТР ИЛЮШИ
-        </div>
-        <div style={{fontSize:15,fontWeight:300,marginBottom:4}}>
-          Илюша будет жить сам или сдаст/продаст?
-        </div>
-        {(()=>{
-          const [ilusha,setIlusha]=React.useState(42);
-          const labels=[
-            [0,15,"Точно сдаст/продаст 📦"],
-            [15,35,"Скорее всего сдаст..."],
-            [35,55,"Ещё не решил 🤔"],
-            [55,75,"Начинает привыкать 🛋️"],
-            [75,90,"Уже купил кота 🐱"],
-            [90,101,"Будет жить сам! 🎊"],
-          ];
-          const label=labels.find(([a,b])=>ilusha>=a&&ilusha<b)?.[2]||"";
-          const barColor=ilusha<35?"#E8937A":ilusha<65?"#D4C87E":"#4A9A5A";
-          return(
-            <div>
-              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:10}}>
-                <div style={{flex:1,height:24,background:"#3C3426",borderRadius:12,overflow:"hidden",position:"relative"}}>
-                  <div style={{width:`${ilusha}%`,height:"100%",background:barColor,borderRadius:12,
-                    transition:"width .3s,background .3s"}}/>
-                  <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",
-                    ...M,fontSize:12,color:"#F7F4EF",fontWeight:400}}>
-                    {ilusha}%
-                  </div>
-                </div>
-                <div style={{...M,fontSize:20}}>{ilusha<35?"😬":ilusha<65?"😐":ilusha<85?"😊":"🥳"}</div>
-              </div>
-              <input type="range" min={0} max={100} value={ilusha}
-                onChange={e=>setIlusha(+e.target.value)}
-                style={{width:"100%",accentColor:barColor,marginBottom:8}}/>
-              <div style={{...M,fontSize:12,color:"#C8B89A",textAlign:"center",minHeight:18}}>{label}</div>
-            </div>
-          );
-        })()}
-      </div>
+      <IlushaMeter card={card} M={M}/>
 
       <div style={{...card,background:"#FDF5E4",border:"1px solid #E8D8A0"}}>
         <div style={{...M,fontSize:10,color:"#7A5A12",marginBottom:8}}>⚠ КЛЮЧЕВЫЕ МОМЕНТЫ</div>
