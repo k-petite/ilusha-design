@@ -324,10 +324,22 @@ function RoomPicker({roomIds, onChange}){
 
 // ── ILUSHA METER ──
 function IlushaMeter({card,M}){
-  const [ilusha,setIlusha]=useState(()=>{
-    try{ const v=localStorage.getItem('ilusha-meter'); return v?+v:42; }catch(e){ return 42; }
-  });
-  const setAndSave=v=>{ setIlusha(v); try{localStorage.setItem('ilusha-meter',v);}catch(e){} };
+  const [ilusha,setIlusha]=useState(42);
+  const [loaded,setLoaded]=useState(false);
+  useEffect(()=>{
+    if(!window._fb)return;
+    const {db,ref,onValue}=window._fb;
+    const unsub=onValue(ref(db,'ilusha-meter'),snap=>{
+      const v=snap.val();
+      if(v!==null&&!isNaN(+v)) setIlusha(+v);
+      setLoaded(true);
+    });
+    return()=>unsub();
+  },[]);
+  const setAndSave=v=>{
+    setIlusha(v);
+    if(window._fb){const {db,ref,set}=window._fb; set(ref(db,'ilusha-meter'),v);}
+  };
   const labels=[
     [0,15,"Точно сдаст/продаст 📦"],
     [15,35,"Скорее всего сдаст..."],
@@ -1140,7 +1152,7 @@ function App(){
                                   background:isActive?"#F0F8F2":"white",
                                   transition:"border-color .2s,background .2s"
                                 }}>
-                                  <div style={{display:"flex",alignItems:"stretch"}}>
+                                  <div style={{display:"flex",alignItems:"flex-start"}}>
 
                                     {/* Left: image block */}
                                     <div style={{width:80,minHeight:80,flexShrink:0,
@@ -1207,59 +1219,48 @@ function App(){
                                         )}
                                       </div>
 
-                                      {/* Row 2: prices (always visible) */}
-                                      <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:isEditing?8:4}}>
-                                        {isEditing
-                                          ? <>
-                                              <label style={{display:"flex",alignItems:"center",gap:5}}>
-                                                <span style={{...M,fontSize:9,color:"#5A9AB8"}}>ПОДОБРАНО</span>
-                                                <input type="number" value={alt.price||""} placeholder="0"
-                                                  onChange={e=>updateAlt({price:e.target.value})} style={{width:90}}/>
-                                              </label>
-                                              <label style={{display:"flex",alignItems:"center",gap:5}}>
-                                                <span style={{...M,fontSize:9,color:"#4A9A5A"}}>ОПЛАЧЕНО</span>
-                                                <input type="number" value={alt.paid||""} placeholder="0"
-                                                  onChange={e=>updateAlt({paid:e.target.value})} style={{width:90}}/>
-                                              </label>
-                                            </>
-                                          : <>
-                                              {alt.price&&<span style={{...M,fontSize:11,color:"#5A9AB8"}}>
-                                                подобрано: {Number(alt.price).toLocaleString("ru-RU")} ₽
-                                              </span>}
-                                              {alt.paid&&<span style={{...M,fontSize:11,color:"#4A9A5A"}}>
-                                                оплачено: {Number(alt.paid).toLocaleString("ru-RU")} ₽
-                                              </span>}
-                                            </>
-                                        }
+                                      {/* Row 2: подобрано | оплачено | ссылка | ссылка на фото */}
+                                      <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:isEditing?8:4}}>
+                                        {isEditing ? <>
+                                          <label style={{display:"flex",alignItems:"center",gap:4}}>
+                                            <span style={{...M,fontSize:9,color:"#5A9AB8"}}>ПОДОБРАНО</span>
+                                            <input type="number" value={alt.price||""} placeholder="0"
+                                              onChange={e=>updateAlt({price:e.target.value})} style={{width:85}}/>
+                                          </label>
+                                          <label style={{display:"flex",alignItems:"center",gap:4}}>
+                                            <span style={{...M,fontSize:9,color:"#4A9A5A"}}>ОПЛАЧЕНО</span>
+                                            <input type="number" value={alt.paid||""} placeholder="0"
+                                              onChange={e=>updateAlt({paid:e.target.value})} style={{width:85}}/>
+                                          </label>
+                                          <label style={{display:"flex",alignItems:"center",gap:4,flex:1,minWidth:120}}>
+                                            <span style={{...M,fontSize:9,color:"#9A8A72"}}>ССЫЛКА</span>
+                                            <input type="text" value={alt.url||""} placeholder="https://..."
+                                              onChange={e=>updateAlt({url:e.target.value})} style={{flex:1}}/>
+                                          </label>
+                                          <label style={{display:"flex",alignItems:"center",gap:4,flex:1,minWidth:120}}>
+                                            <span style={{...M,fontSize:9,color:"#9A8A72"}}>ФОТО URL</span>
+                                            <input type="text" value={alt.imageUrl||""} placeholder="https://...jpg"
+                                              onChange={e=>updateAlt({imageUrl:e.target.value,imageData:""})} style={{flex:1}}/>
+                                          </label>
+                                        </> : <>
+                                          {alt.price&&<span style={{...M,fontSize:11,color:"#5A9AB8"}}>подобрано: {Number(alt.price).toLocaleString("ru-RU")} ₽</span>}
+                                          {alt.paid&&<span style={{...M,fontSize:11,color:"#4A9A5A"}}>оплачено: {Number(alt.paid).toLocaleString("ru-RU")} ₽</span>}
+                                          {alt.url&&<a href={alt.url} target="_blank" rel="noreferrer"
+                                            style={{...M,fontSize:10,color:"#8DB5C8",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:160}}>
+                                            🔗 {(()=>{try{return new URL(alt.url).hostname.replace("www.","")}catch(e){return alt.url.slice(0,25)}})()}
+                                          </a>}
+                                        </>}
                                       </div>
 
-                                      {/* Row 3: URL */}
-                                      {isEditing
-                                        ? <input type="text" value={alt.url||""} placeholder="https://..."
-                                            onChange={e=>updateAlt({url:e.target.value})}
-                                            style={{width:"100%",marginBottom:6}}/>
-                                        : alt.url&&<a href={alt.url} target="_blank" rel="noreferrer"
-                                            style={{...M,fontSize:10,color:"#8DB5C8",display:"block",marginBottom:4,
-                                              overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                                            🔗 {(()=>{try{return new URL(alt.url).hostname.replace("www.","")}catch(e){return alt.url.slice(0,35)}})()}
-                                          </a>
-                                      }
-
-                                      {/* Row 4: comment */}
+                                      {/* Row 3: комментарий */}
                                       {isEditing
                                         ? <textarea value={alt.comment||""} placeholder="Комментарий..."
                                             onChange={e=>updateAlt({comment:e.target.value})}
                                             onInput={e=>{e.target.style.height="auto";e.target.style.height=e.target.scrollHeight+"px";}}
-                                            style={{width:"100%",resize:"vertical",minHeight:32,marginBottom:6}}/>
+                                            style={{width:"100%",resize:"vertical",minHeight:32,marginTop:4}}/>
                                         : alt.comment&&<div style={{fontSize:11,color:"#7A6A52",fontStyle:"italic",marginTop:4,
                                           overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{alt.comment}</div>
                                       }
-
-                                      {/* Image picker (editing) */}
-                                      {isEditing&&(
-                                        <ImagePicker imageUrl={alt.imageUrl||""} imageData={alt.imageData||""} url={alt.url||""}
-                                          onChange={patch=>updateAlt(patch)}/>
-                                      )}
                                     </div>
                                   </div>
                                 </div>
@@ -1285,9 +1286,11 @@ function App(){
                                     style={{width:"100%"}}/>
                                 </div>
                               ))}
-                              <div style={{marginBottom:10}}>
-                                <ImagePicker imageUrl={newAlt.imageUrl} imageData={newAlt.imageData} url={newAlt.url}
-                                  onChange={patch=>setNewAlt(p=>({...p,...patch}))}/>
+                              <div style={{marginBottom:8}}>
+                                <div style={{...M,fontSize:9,color:"#9A8A72",marginBottom:3}}>ФОТО URL</div>
+                                <input type="text" placeholder="https://...jpg" value={newAlt.imageUrl||""}
+                                  onChange={e=>setNewAlt(p=>({...p,imageUrl:e.target.value,imageData:""}))}
+                                  style={{width:"100%"}}/>
                               </div>
                               <button onClick={()=>addAlt(cat.id,sub.id)}
                                 disabled={!newAlt.name}
