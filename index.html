@@ -25,7 +25,17 @@
   window.dispatchEvent(new Event("firebase-ready"));
 </script>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet"/>
-<style>*{box-sizing:border-box;margin:0;padding:0;}body{background:#F7F4EF;}</style>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#F7F4EF;}
+@media print{
+  body{background:white;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .no-print{display:none!important;}
+  .print-header{display:block!important;}
+  input,textarea,select,button:not(.print-keep){display:none!important;}
+  input[type=range]{display:none!important;}
+}
+</style>
 </head>
 <body>
 <div id="root"></div>
@@ -553,7 +563,7 @@ function App(){
   <div style={{background:"#2C2416",color:"#F7F4EF",padding:"22px 18px 0"}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
       <div style={{...M,fontSize:9,letterSpacing:".18em",color:"#C8A97E"}}>БЮДЖЕТ РЕМОНТА</div>
-      <div style={{...M,fontSize:9,color:"#5A4A32",marginLeft:8}}>v2.1</div>
+      <div style={{...M,fontSize:9,color:"#5A4A32",marginLeft:8}}>v2.2</div>
       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
         {saveStatus==="saving"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#FDF5E4",color:"#8A6A12"}}>сохраняю…</span>}
         {saveStatus==="saved"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#E6F5EA",color:"#2A6A2A"}}>✓ сохранено</span>}
@@ -564,6 +574,7 @@ function App(){
               <button onClick={()=>window.location.reload()} style={{background:"none",border:"1px solid #4A6A7A",color:"#8ABACA",padding:"5px 10px",borderRadius:4,cursor:"pointer",...M,fontSize:10}}>↻</button>
             </>
           : <><button onClick={handleExport} style={{background:"none",border:"1px solid #4A6A5A",color:"#8ACAAA",padding:"5px 10px",borderRadius:4,cursor:"pointer",...M,fontSize:10}}>↓ экспорт</button>
+              <button onClick={()=>window.print()} style={{background:"none",border:"1px solid #6A5A7A",color:"#B8A8CA",padding:"5px 10px",borderRadius:4,cursor:"pointer",...M,fontSize:10}}>🖨 печать</button>
               <button onClick={()=>importRef.current.click()} style={{background:"none",border:"1px solid #4A5A6A",color:"#8AAACA",padding:"5px 10px",borderRadius:4,cursor:"pointer",...M,fontSize:10}}>↑ импорт</button>
               <input ref={importRef} type="file" accept=".json" style={{display:"none"}} onChange={handleImport}/>
             </>
@@ -838,7 +849,7 @@ function App(){
       </div>
 
       {/* FILTER BAR */}
-      <div style={{background:"white",borderRadius:8,padding:"12px 14px",marginBottom:12,boxShadow:"0 1px 5px rgba(44,36,22,.07)"}}>
+      <div className="no-print" style={{background:"white",borderRadius:8,padding:"12px 14px",marginBottom:12,boxShadow:"0 1px 5px rgba(44,36,22,.07)"}}>
         <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:10}}>
           <span style={{...M,fontSize:10,color:"#9A8A72",flexShrink:0}}>ПОМЕЩЕНИЕ:</span>
           <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
@@ -939,21 +950,33 @@ function App(){
                   <span style={{fontSize:13}}>{isCatOpen?"▾":"▸"}</span>
                 </button>
                 {!IS_VIEWER&&editCatId===cat.id ? <>
-                  {/* Inline edit: icon picker + name */}
-                  <div style={{display:"flex",alignItems:"center",gap:6,flex:1,flexWrap:"wrap"}}>
-                    <select value={cat.icon}
-                      onChange={e=>setCats(p=>p.map(c=>c.id!==cat.id?c:{...c,icon:e.target.value}))}
-                      style={{fontSize:16,padding:"2px 4px",borderRadius:4,border:"1px solid #C8A97E",
-                        background:"white",cursor:"pointer",width:60}}>
-                      {["🪣","🛋️","🍳","📺","💡","🪞","🚪","🛏️","🚿","🏠","📦","🪑","🖼️","🧹","🔧","🪟","🏗️","🎨","🪴","🛁","🧺","🔑","📐","🪤","🎭","💎","🌿","🛗","🚰","🏮"].map(em=><option key={em} value={em}>{em}</option>)}
-                    </select>
-                    <input type="text" value={cat.name}
-                      onChange={e=>setCats(p=>p.map(c=>c.id!==cat.id?c:{...c,name:e.target.value}))}
-                      style={{fontSize:14,fontFamily:"'Cormorant Garamond',serif",border:"none",
-                        borderBottom:"1px solid #C8A97E",background:"transparent",
-                        flex:1,minWidth:100,color:"#2C2416",padding:"0 0 2px"}}
-                      onBlur={()=>setEditCatId(null)}
-                      autoFocus/>
+                  {/* Inline edit: icon grid + name input */}
+                  <div style={{display:"flex",flexDirection:"column",gap:6,flex:1}}>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                      {["🪣","🛋️","🍳","📺","💡","🪞","🚪","🛏️","🚿","🏠","📦","🪑","🖼️","🧹","🔧","🪟","🏗️","🎨","🪴","🛁","🧺","🔑","📐","🪤","🎭","💎","🌿","🛗","🚰","🏮"].map(em=>(
+                        <button key={em}
+                          onMouseDown={e=>{e.preventDefault();setCats(p=>p.map(c=>c.id!==cat.id?c:{...c,icon:em}));}}
+                          style={{fontSize:14,padding:"2px 4px",borderRadius:4,cursor:"pointer",border:"none",
+                            background:cat.icon===em?"#2C2416":"#F5F0E8",
+                            outline:cat.icon===em?"2px solid #C8A97E":"none",lineHeight:1}}>
+                          {em}
+                        </button>
+                      ))}
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      <span style={{fontSize:18}}>{cat.icon}</span>
+                      <input type="text" value={cat.name}
+                        onChange={e=>setCats(p=>p.map(c=>c.id!==cat.id?c:{...c,name:e.target.value}))}
+                        style={{fontSize:14,fontFamily:"'Cormorant Garamond',serif",border:"none",
+                          borderBottom:"1px solid #C8A97E",background:"transparent",
+                          flex:1,color:"#2C2416",padding:"0 0 2px"}}
+                        autoFocus/>
+                      <button onMouseDown={()=>setEditCatId(null)}
+                        style={{...M,fontSize:10,padding:"3px 8px",borderRadius:4,
+                          background:"#2C2416",color:"#F7F4EF",border:"none",cursor:"pointer",flexShrink:0}}>
+                        ок
+                      </button>
+                    </div>
                   </div>
                 </> : <>
                   <span style={{fontSize:16}}>{cat.icon}</span>
@@ -998,8 +1021,6 @@ function App(){
                   const st=STATUS_MAP[sub.status||"none"];
                   return(
                     <div key={sub.id} className="sub-sep"
-                      draggable={!IS_VIEWER}
-                      onDragStart={e=>{e.stopPropagation();setDragSub({catId:cat.id,subId:sub.id});}}
                       onDragOver={e=>{e.preventDefault();}}
                       onDrop={()=>{
                         if(!dragSub||dragSub.catId!==cat.id||dragSub.subId===sub.id)return;
@@ -1018,8 +1039,10 @@ function App(){
                       {/* Sub header */}
                       <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
                         {!IS_VIEWER&&<span title="Перетащи чтобы изменить порядок"
+                          draggable={true}
+                          onDragStart={e=>{e.stopPropagation();setDragSub({catId:cat.id,subId:sub.id});}}
                           style={{cursor:"grab",color:"#C8B89A",fontSize:14,marginTop:3,flexShrink:0,
-                            userSelect:"none",padding:"2px 4px"}}>⠿</span>}
+                            userSelect:"none",padding:"2px 4px",touchAction:"none"}}>⠿</span>}
                         <button className="exp-btn" style={{marginTop:3,flexShrink:0}}
                           onClick={()=>setOpenSubs(p=>({...p,[sub.id]:!p[sub.id]}))}>
                           <span style={{fontSize:11}}>{isSubOpen?"▾":"▸"}</span>
@@ -1267,12 +1290,12 @@ function App(){
                                           <label style={{display:"flex",alignItems:"center",gap:4}}>
                                             <span style={{...M,fontSize:9,color:"#5A9AB8"}}>ПОДОБРАНО</span>
                                             <input type="number" value={alt.price||""} placeholder="0"
-                                              onChange={e=>updateAlt({price:e.target.value})} style={{width:85}}/>
+                                              onChange={e=>updateAlt({price:e.target.value})} style={{width:85,textAlign:"left"}}/>
                                           </label>
                                           <label style={{display:"flex",alignItems:"center",gap:4}}>
                                             <span style={{...M,fontSize:9,color:"#4A9A5A"}}>ОПЛАЧЕНО</span>
                                             <input type="number" value={alt.paid||""} placeholder="0"
-                                              onChange={e=>updateAlt({paid:e.target.value})} style={{width:85}}/>
+                                              onChange={e=>updateAlt({paid:e.target.value})} style={{width:85,textAlign:"left"}}/>
                                           </label>
                                           <label style={{display:"flex",alignItems:"center",gap:4,flex:1,minWidth:120}}>
                                             <span style={{...M,fontSize:9,color:"#9A8A72"}}>ССЫЛКА</span>
@@ -1312,32 +1335,46 @@ function App(){
 
                           {/* Inline add variant form */}
                           {addingAlt===sub.id&&!IS_VIEWER&&(
-                            <div style={{background:"#F5F0E8",borderRadius:8,padding:"14px",marginTop:8,border:"1px solid #DDD5C4"}}>
-                              <div style={{...M,fontSize:10,color:"#7A6A52",marginBottom:10}}>НОВЫЙ ВАРИАНТ</div>
-                              {[
-                                {field:"name",   label:"НАЗВАНИЕ *",    ph:"Ferroni Гарда",   type:"text"},
-                                {field:"url",    label:"ССЫЛКА",         ph:"https://...",     type:"text"},
-                                {field:"price",  label:"ПОДОБРАНО (₽)", ph:"45000",           type:"number"},
-                                {field:"paid",   label:"ОПЛАЧЕНО (₽)",  ph:"0",               type:"number"},
-                                {field:"comment",label:"КОММЕНТАРИЙ",   ph:"Детали...",       type:"text"},
-                              ].map(({field,label,ph,type})=>(
-                                <div key={field} style={{marginBottom:8}}>
-                                  <div style={{...M,fontSize:9,color:"#9A8A72",marginBottom:3}}>{label}</div>
-                                  <input type={type} placeholder={ph} value={newAlt[field]}
-                                    onChange={e=>setNewAlt(p=>({...p,[field]:e.target.value}))}
-                                    style={{width:"100%"}}/>
-                                </div>
-                              ))}
+                            <div style={{background:"#F5F0E8",borderRadius:8,padding:"12px",marginTop:8,border:"1px solid #DDD5C4"}}>
+                              <div style={{...M,fontSize:10,color:"#7A6A52",marginBottom:8}}>НОВЫЙ ВАРИАНТ</div>
+                              {/* Row 1: название */}
+                              <div style={{marginBottom:6}}>
+                                <div style={{...M,fontSize:9,color:"#9A8A72",marginBottom:2}}>НАЗВАНИЕ *</div>
+                                <input type="text" placeholder="Ferroni Гарда" value={newAlt.name}
+                                  onChange={e=>setNewAlt(p=>({...p,name:e.target.value}))}
+                                  style={{width:"100%",textAlign:"left"}}/>
+                              </div>
+                              {/* Row 2: подобрано | оплачено | ссылка | фото url */}
+                              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 2fr 2fr",gap:6,marginBottom:6}}>
+                                {[
+                                  {field:"price",    label:"ПОДОБРАНО ₽", ph:"45000",           type:"number"},
+                                  {field:"paid",     label:"ОПЛАЧЕНО ₽",  ph:"0",               type:"number"},
+                                  {field:"url",      label:"ССЫЛКА",       ph:"https://...",     type:"text"},
+                                  {field:"imageUrl", label:"ФОТО URL",     ph:"https://...jpg",  type:"text"},
+                                ].map(({field,label,ph,type})=>(
+                                  <div key={field}>
+                                    <div style={{...M,fontSize:9,color:"#9A8A72",marginBottom:2}}>{label}</div>
+                                    <input type={type} placeholder={ph}
+                                      value={field==="imageUrl"?newAlt.imageUrl||"":newAlt[field]||""}
+                                      onChange={e=>setNewAlt(p=>({...p,
+                                        [field==="imageUrl"?"imageUrl":field]:e.target.value,
+                                        ...(field==="imageUrl"?{imageData:""}:{})
+                                      }))}
+                                      style={{width:"100%",textAlign:"left"}}/>
+                                  </div>
+                                ))}
+                              </div>
+                              {/* Row 3: комментарий */}
                               <div style={{marginBottom:8}}>
-                                <div style={{...M,fontSize:9,color:"#9A8A72",marginBottom:3}}>ФОТО URL</div>
-                                <input type="text" placeholder="https://...jpg" value={newAlt.imageUrl||""}
-                                  onChange={e=>setNewAlt(p=>({...p,imageUrl:e.target.value,imageData:""}))}
-                                  style={{width:"100%"}}/>
+                                <div style={{...M,fontSize:9,color:"#9A8A72",marginBottom:2}}>КОММЕНТАРИЙ</div>
+                                <textarea placeholder="Детали, цвет, размер..." value={newAlt.comment||""}
+                                  onChange={e=>setNewAlt(p=>({...p,comment:e.target.value}))}
+                                  style={{width:"100%",resize:"vertical",minHeight:30,textAlign:"left"}}/>
                               </div>
                               <button onClick={()=>addAlt(cat.id,sub.id)}
                                 disabled={!newAlt.name}
                                 style={{width:"100%",background:newAlt.name?"#2C2416":"#9A8A72",
-                                  color:"#F7F4EF",border:"none",padding:"9px",borderRadius:5,
+                                  color:"#F7F4EF",border:"none",padding:"8px",borderRadius:5,
                                   cursor:newAlt.name?"pointer":"default",...M,fontSize:11}}>
                                 ДОБАВИТЬ ВАРИАНТ
                               </button>
