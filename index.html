@@ -324,7 +324,10 @@ function RoomPicker({roomIds, onChange}){
 
 // ── ILUSHA METER ──
 function IlushaMeter({card,M}){
-  const [ilusha,setIlusha]=useState(42);
+  const [ilusha,setIlusha]=useState(()=>{
+    try{ const v=localStorage.getItem('ilusha-meter'); return v?+v:42; }catch(e){ return 42; }
+  });
+  const setAndSave=v=>{ setIlusha(v); try{localStorage.setItem('ilusha-meter',v);}catch(e){} };
   const labels=[
     [0,15,"Точно сдаст/продаст 📦"],
     [15,35,"Скорее всего сдаст..."],
@@ -350,7 +353,7 @@ function IlushaMeter({card,M}){
         <div style={{fontSize:20}}>{ilusha<35?"😬":ilusha<65?"😐":ilusha<85?"😊":"🥳"}</div>
       </div>
       <input type="range" min={0} max={100} value={ilusha}
-        onChange={e=>setIlusha(+e.target.value)}
+        onChange={e=>setAndSave(+e.target.value)}
         style={{width:"100%",accentColor:barColor,marginBottom:8}}/>
       <div style={{...M,fontSize:12,color:"#C8B89A",textAlign:"center",minHeight:18}}>{label}</div>
     </div>
@@ -806,8 +809,19 @@ function App(){
   {/* FLEXIBLE */}
   {tab==="flexible"&&(
     <div>
-      <div style={{...M,fontSize:10,color:"#9A8A72",marginBottom:10}}>
-        {IS_VIEWER?"ПРОСМОТР — только чтение":"КАТЕГОРИИ — вноси суммы по подкатегориям"}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+        <div style={{...M,fontSize:10,color:"#9A8A72"}}>
+          {IS_VIEWER?"ПРОСМОТР — только чтение":"КАТЕГОРИИ — вноси суммы по подкатегориям"}
+        </div>
+        <div style={{display:"flex",gap:6}}>
+          <button className="ghost-btn" onClick={()=>{
+            const ids={};
+            cats.forEach(c=>{ ids[c.id]=true; c.subs.forEach(s=>{ ids[s.id]=true; }); });
+            setOpenCats(Object.fromEntries(cats.map(c=>[c.id,true])));
+            setOpenSubs(Object.fromEntries(cats.flatMap(c=>c.subs).map(s=>[s.id,false])));
+          }}>развернуть все</button>
+          <button className="ghost-btn" onClick={()=>{ setOpenCats({}); setOpenSubs({}); }}>свернуть все</button>
+        </div>
       </div>
 
       {/* FILTER BAR */}
@@ -1038,7 +1052,7 @@ function App(){
 
                       {/* Expanded sub — header only, variants are the main content */}
                       {isSubOpen&&(
-                        <div style={{marginTop:10}}>
+                        <div style={{marginTop:10,paddingLeft:64,borderLeft:"2px solid #EDE7DC",marginLeft:8}}>
 
                           {/* ── SUB META (plan, comment, rooms, view status) ── */}
                           <div style={{background:"#FDFAF6",border:"1px solid #EDE7DC",borderRadius:6,
@@ -1097,7 +1111,7 @@ function App(){
                                 ВАРИАНТЫ {sub.alts&&sub.alts.length>0&&`(${sub.alts.length})`}
                               </span>
                               {!IS_VIEWER&&<button className="ghost-btn"
-                                onClick={()=>setAltModal({catId:cat.id,subId:sub.id})}>
+                                onClick={()=>{setAddingAlt(sub.id===addingAlt?null:sub.id);setNewAlt({name:"",url:"",imageUrl:"",imageData:"",price:"",paid:"",comment:""});}}>
                                 + добавить вариант
                               </button>}
                             </div>
