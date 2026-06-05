@@ -114,26 +114,27 @@ const ROUGH_GROUPS = [
 ];
 
 // ── HELPERS ──
-const fmt  = n => n===0?"—":new Intl.NumberFormat("ru-RU",{maximumFractionDigits:0}).format(Math.round(n))+" ₽";
-const fmtK = n => n<=0?"—":(n>=1e6?(n/1e6).toFixed(1)+"М":Math.round(n/1e3)+"К")+" ₽";
+const fmt  = n => { const v=parseFloat(n); return (!v||isNaN(v))?"—":new Intl.NumberFormat("ru-RU",{maximumFractionDigits:0}).format(Math.round(v))+" ₽"; };
+const fmtK = n => { const v=parseFloat(n); if(!v||isNaN(v)||v<=0) return "—"; return (v>=1e6?(v/1e6).toFixed(1)+"М":Math.round(v/1e3)+"К")+" ₽"; };
 const pct  = (a,b) => b===0?0:Math.min(100,Math.round(a/b*100));
 
 // ── DERIVED CALCS ──
 
 // actualCost per sub: paid > selected > planned
+const toNum = v => { const n=parseFloat(v); return isNaN(n)?0:n; };
 const actual = s => {
   if(!s) return 0;
   // If an active alternative is set, pull its paid/price
   if(s.activeAltId && s.alts && s.alts.length>0) {
     const a = s.alts.find(x=>x.id===s.activeAltId);
     if(a) {
-      if(a.paid && +a.paid>0) return +a.paid;
-      if(a.price && +a.price>0) return +a.price;
+      if(toNum(a.paid)>0) return toNum(a.paid);
+      if(toNum(a.price)>0) return toNum(a.price);
     }
   }
-  if(s.paid && s.paid>0) return s.paid;
-  if(s.selected && s.selected>0) return s.selected;
-  return s.planned||0;
+  if(toNum(s.paid)>0) return toNum(s.paid);
+  if(toNum(s.selected)>0) return toNum(s.selected);
+  return toNum(s.planned);
 };
 // Get selected/paid from active alt or sub fields
 const subSelected = s => {
@@ -155,9 +156,9 @@ const subPaid = s => {
 
 function calcCat(cat) {
   const subs = cat.subs||[];
-  const planned    = subs.reduce((s,x)=>s+(+x.planned||0), 0);
-  const selected   = subs.reduce((s,x)=>s+(+x.selected||0), 0);
-  const paid       = subs.reduce((s,x)=>s+(+x.paid||0), 0);
+  const planned    = subs.reduce((s,x)=>s+toNum(x.planned), 0);
+  const selected   = subs.reduce((s,x)=>s+toNum(x.selected), 0);
+  const paid       = subs.reduce((s,x)=>s+toNum(x.paid), 0);
   const actualSum  = subs.reduce((s,x)=>s+actual(x), 0);
   const delta      = actualSum - planned;
   return { planned, selected, paid, actualSum, delta };
@@ -179,12 +180,12 @@ function calcProject(cats, roughData) {
     };
   }
   const allSubs      = cats.flatMap(c=>c.subs||[]);
-  const flexPlanned  = allSubs.reduce((s,x)=>s+(+x.planned||0), 0);
-  const selected     = allSubs.reduce((s,x)=>s+(+x.selected||0), 0);
-  const flexPaid     = allSubs.reduce((s,x)=>s+(+x.paid||0), 0);
+  const flexPlanned  = allSubs.reduce((s,x)=>s+toNum(x.planned), 0);
+  const selected     = allSubs.reduce((s,x)=>s+toNum(x.selected), 0);
+  const flexPaid     = allSubs.reduce((s,x)=>s+toNum(x.paid), 0);
   const flexActual   = allSubs.reduce((s,x)=>s+actual(x), 0);
-  const savings      = allSubs.reduce((s,x)=>s+Math.max(0,(+x.planned||0)-actual(x)), 0);
-  const overruns     = allSubs.reduce((s,x)=>s+Math.max(0,actual(x)-(+x.planned||0)), 0);
+  const savings      = allSubs.reduce((s,x)=>s+Math.max(0,toNum(x.planned)-actual(x)), 0);
+  const overruns     = allSubs.reduce((s,x)=>s+Math.max(0,actual(x)-toNum(x.planned)), 0);
   const totalPlanned = flexPlanned + rd.planned;
   const totalPaid    = flexPaid + (rd.paid||0);
   const toPay        = Math.max(0, flexActual - flexPaid) + Math.max(0, (rd.planned||ROUGH_PLANNED) - (rd.paid||0));
@@ -500,7 +501,7 @@ function App(){
   <div style={{background:"#2C2416",color:"#F7F4EF",padding:"22px 18px 0"}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
       <div style={{...M,fontSize:9,letterSpacing:".18em",color:"#C8A97E"}}>БЮДЖЕТ РЕМОНТА</div>
-      <div style={{...M,fontSize:9,color:"#5A4A32",marginLeft:8}}>v1.8</div>
+      <div style={{...M,fontSize:9,color:"#5A4A32",marginLeft:8}}>v1.9</div>
       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
         {saveStatus==="saving"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#FDF5E4",color:"#8A6A12"}}>сохраняю…</span>}
         {saveStatus==="saved"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#E6F5EA",color:"#2A6A2A"}}>✓ сохранено</span>}
