@@ -64,7 +64,8 @@ const ROOM_MAP = Object.fromEntries(ROOMS.map(r=>[r.id,r]));
 const uid = () => Math.random().toString(36).slice(2);
 const mk = (name, planned=0) => ({
   id:uid(), name, planned, selected:0, paid:0,
-  status:"none", roomIds:[], url:"", imageUrl:"", imageData:"", comment:"", alts:[]
+  status:"none", viewStatus:"none", roomIds:[], url:"", imageUrl:"", imageData:"", comment:"",
+  activeAltId:null, alts:[]
 });
 
 const DEFAULT_CATS = [
@@ -122,9 +123,34 @@ const pct  = (a,b) => b===0?0:Math.min(100,Math.round(a/b*100));
 // actualCost per sub: paid > selected > planned
 const actual = s => {
   if(!s) return 0;
+  // If an active alternative is set, pull its paid/price
+  if(s.activeAltId && s.alts && s.alts.length>0) {
+    const a = s.alts.find(x=>x.id===s.activeAltId);
+    if(a) {
+      if(a.paid && +a.paid>0) return +a.paid;
+      if(a.price && +a.price>0) return +a.price;
+    }
+  }
   if(s.paid && s.paid>0) return s.paid;
   if(s.selected && s.selected>0) return s.selected;
   return s.planned||0;
+};
+// Get selected/paid from active alt or sub fields
+const subSelected = s => {
+  if(!s) return 0;
+  if(s.activeAltId && s.alts) {
+    const a = s.alts.find(x=>x.id===s.activeAltId);
+    if(a && a.price && +a.price>0) return +a.price;
+  }
+  return s.selected||0;
+};
+const subPaid = s => {
+  if(!s) return 0;
+  if(s.activeAltId && s.alts) {
+    const a = s.alts.find(x=>x.id===s.activeAltId);
+    if(a && a.paid && +a.paid>0) return +a.paid;
+  }
+  return s.paid||0;
 };
 
 function calcCat(cat) {
@@ -304,7 +330,8 @@ function App(){
   const [openSubs,setOpenSubs]   = useState({});
   const [openRough,setOpenRough] = useState({});
   const [altModal,setAltModal]   = useState(null);
-  const [newAlt,setNewAlt]       = useState({name:"",url:"",imageUrl:"",imageData:"",price:"",comment:""});
+  const [newAlt,setNewAlt]       = useState({name:"",url:"",imageUrl:"",imageData:"",price:"",paid:"",comment:"",viewStatus:"none"});
+  const [editAlt,setEditAlt]     = useState(null); // {catId,subId,altId}
   const [newCatModal,setNewCatModal]=useState(false);
   const [newCat,setNewCat]       = useState({name:"",icon:"📦"});
   const [filterRoom,setFilterRoom]   = useState("all");
@@ -433,7 +460,8 @@ function App(){
     if(!altModal||!newAlt.name)return;
     const {catId,subId}=altModal;
     const sub=cats.find(c=>c.id===catId).subs.find(s=>s.id===subId);
-    updSub(catId,subId,{alts:[...(sub.alts||[]),{id:uid(),...newAlt}]});
+    const altId=uid();
+    updSub(catId,subId,{alts:[...(sub.alts||[]),{id:altId,...newAlt}]});
     setNewAlt({name:"",url:"",imageUrl:"",imageData:"",price:"",comment:""});
   };
   const removeAlt=(cid,sid,aid)=>{
@@ -888,8 +916,18 @@ function App(){
                             }
                             <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0,flexWrap:"wrap"}}>
                               <StatusPill value={sub.status||"none"} onChange={v=>updSub(cat.id,sub.id,{status:v})}/>
+                              {/* View status badge */}
+                              {sub.viewStatus==="viewed"
+                                ? <span style={{...M,fontSize:9,padding:"2px 7px",borderRadius:8,background:"#E6F5EA",color:"#2A6A2A"}}>✓ посмотрели</span>
+                                : <span style={{...M,fontSize:9,padding:"2px 7px",borderRadius:8,background:"#F5F0E8",color:"#9A8A72"}}>👁 посмотреть</span>
+                              }
+                              {/* Active alt badge */}
+                              {sub.activeAltId&&(()=>{
+                                const a=(sub.alts||[]).find(x=>x.id===sub.activeAltId);
+                                return a?<span style={{...M,fontSize:9,padding:"2px 7px",borderRadius:8,background:"#E6F5EA",color:"#2A6A2A"}}>✓ {a.name}</span>:null;
+                              })()}
                               <DiffBadge sub={sub}/>
-                              {sub.alts&&sub.alts.length>0&&<span className="badge" style={{background:"#EDE7DC",color:"#7A6A52"}}>{sub.alts.length} альт.</span>}
+                              {sub.alts&&sub.alts.length>0&&<span className="badge" style={{background:"#EDE7DC",color:"#7A6A52"}}>{sub.alts.length} вар.</span>}
                               {!IS_VIEWER&&<button className="icon-btn" title="Удалить"
                                 onClick={e=>{e.stopPropagation();if(window.confirm(`Удалить "${sub.name}"?`))setCats(p=>p.map(c=>c.id!==cat.id?c:{...c,subs:c.subs.filter(s=>s.id!==sub.id)}));}}
                                 style={{fontSize:11,color:"#C8A0A0",opacity:.6}}>🗑</button>}
@@ -979,28 +1017,135 @@ function App(){
                           )}
                           {IS_VIEWER&&sub.url&&<div style={{marginBottom:10}}><a href={sub.url} target="_blank" rel="noreferrer" style={{...M,fontSize:12,color:"#8DB5C8"}}>🔗 открыть</a></div>}
 
-                          {/* Alternatives */}
+                          {/* VIEW STATUS */}
+                          {!IS_VIEWER&&(
+                            <div style={{marginBottom:12}}>
+                              <div style={{...M,fontSize:9,color:"#9A8A72",marginBottom:6}}>ПРОСМОТР</div>
+                              <div style={{display:"flex",gap:6}}>
+                                {[{id:"none",label:"Нужно посмотреть"},{id:"viewed",label:"Посмотрели"}].map(vs=>{
+                                  const active=(sub.viewStatus||"none")===vs.id;
+                                  return(
+                                    <button key={vs.id} onClick={()=>updSub(cat.id,sub.id,{viewStatus:vs.id})}
+                                      style={{background:active?"#2C2416":"none",color:active?"#F7F4EF":"#7A6A52",
+                                        border:"1px solid",borderColor:active?"#2C2416":"#DDD5C4",
+                                        padding:"4px 12px",borderRadius:12,cursor:"pointer",...M,fontSize:10}}>
+                                      {vs.id==="viewed"?"✓ ":""}{vs.label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                          {IS_VIEWER&&sub.viewStatus==="viewed"&&(
+                            <div style={{...M,fontSize:10,color:"#4A9A5A",marginBottom:8}}>✓ Посмотрели</div>
+                          )}
+
+                          {/* ALTERNATIVES */}
                           <div>
                             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                              <div style={{...M,fontSize:9,color:"#9A8A72"}}>АЛЬТЕРНАТИВЫ</div>
-                              {!IS_VIEWER&&<button className="ghost-btn" onClick={()=>setAltModal({catId:cat.id,subId:sub.id})}>+ добавить</button>}
+                              <div style={{...M,fontSize:9,color:"#9A8A72"}}>ВАРИАНТЫ</div>
+                              {!IS_VIEWER&&<button className="ghost-btn" onClick={()=>setAltModal({catId:cat.id,subId:sub.id})}>+ добавить вариант</button>}
                             </div>
-                            {(sub.alts||[]).map(alt=>(
-                              <div key={alt.id} style={{background:"#F9F6F1",borderRadius:6,padding:"8px 10px",marginBottom:6,display:"flex",gap:8,alignItems:"flex-start"}}>
-                                {(alt.imageData||alt.imageUrl)&&<img src={alt.imageData||alt.imageUrl} alt="" style={{width:48,height:48,objectFit:"contain",background:"#F9F6F1",borderRadius:6,border:"1px solid #EDE7DC",flexShrink:0}}/>}
-                                <div style={{flex:1,minWidth:0}}>
-                                  <div style={{display:"flex",justifyContent:"space-between"}}>
-                                    <span style={{fontSize:13}}>{alt.name}</span>
-                                    <div style={{display:"flex",gap:6,flexShrink:0,alignItems:"center"}}>
-                                      {alt.price&&<span style={{...M,fontSize:11,color:"#5A4A32"}}>{alt.price} ₽</span>}
-                                      {!IS_VIEWER&&<button className="icon-btn" onClick={()=>removeAlt(cat.id,sub.id,alt.id)}>✕</button>}
+                            {(()=>{
+                              const alts = sub.alts||[];
+                              const sorted = [...alts].sort((a,b)=>
+                                a.id===sub.activeAltId?-1:b.id===sub.activeAltId?1:0
+                              );
+                              return sorted.map(alt=>{
+                                const isActive = alt.id===sub.activeAltId;
+                                const altSrc = alt.imageData||alt.imageUrl||null;
+                                const isEditing = editAlt&&editAlt.altId===alt.id;
+                                return(
+                                  <div key={alt.id} style={{
+                                    borderRadius:8,padding:"10px 12px",marginBottom:8,
+                                    border:isActive?"2px solid #4A9A5A":"1px solid #EDE7DC",
+                                    background:isActive?"#F0F8F2":"#F9F6F1"
+                                  }}>
+                                    <div style={{display:"flex",gap:8,alignItems:"flex-start"}}>
+                                      {/* Thumbnail */}
+                                      {altSrc&&<img src={altSrc} alt=""
+                                        style={{width:52,height:52,objectFit:"contain",background:"#F9F6F1",
+                                          borderRadius:6,border:"1px solid #EDE7DC",flexShrink:0}}/>}
+                                      <div style={{flex:1,minWidth:0}}>
+                                        {/* Name + active badge */}
+                                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6,marginBottom:4}}>
+                                          <span style={{fontSize:13,fontWeight:isActive?400:300}}>{alt.name}</span>
+                                          <div style={{display:"flex",gap:4,flexShrink:0,alignItems:"center"}}>
+                                            {isActive&&<span style={{...M,fontSize:9,padding:"2px 7px",borderRadius:8,background:"#4A9A5A",color:"white"}}>✓ основной</span>}
+                                            {!IS_VIEWER&&!isActive&&(
+                                              <button onClick={()=>updSub(cat.id,sub.id,{activeAltId:alt.id})}
+                                                style={{...M,fontSize:9,padding:"2px 8px",borderRadius:8,
+                                                  background:"none",border:"1px solid #4A9A5A",color:"#4A9A5A",cursor:"pointer"}}>
+                                                сделать основным
+                                              </button>
+                                            )}
+                                            {isActive&&!IS_VIEWER&&(
+                                              <button onClick={()=>updSub(cat.id,sub.id,{activeAltId:null})}
+                                                style={{...M,fontSize:9,padding:"2px 8px",borderRadius:8,
+                                                  background:"none",border:"1px solid #9A8A72",color:"#9A8A72",cursor:"pointer"}}>
+                                                снять
+                                              </button>
+                                            )}
+                                            {!IS_VIEWER&&(
+                                              <button className="icon-btn"
+                                                onClick={()=>setEditAlt(isEditing?null:{catId:cat.id,subId:sub.id,altId:alt.id})}
+                                                style={{fontSize:12}}>✏️</button>
+                                            )}
+                                            {!IS_VIEWER&&(
+                                              <button className="icon-btn" onClick={()=>{
+                                                removeAlt(cat.id,sub.id,alt.id);
+                                                if(sub.activeAltId===alt.id) updSub(cat.id,sub.id,{activeAltId:null});
+                                              }}>✕</button>
+                                            )}
+                                          </div>
+                                        </div>
+                                        {/* Price / paid */}
+                                        <div style={{display:"flex",gap:10,...M,fontSize:11}}>
+                                          {alt.price&&<span style={{color:"#5A9AB8"}}>подобрано: {alt.price} ₽</span>}
+                                          {alt.paid&&<span style={{color:"#4A9A5A"}}>оплачено: {alt.paid} ₽</span>}
+                                        </div>
+                                        {alt.url&&<a href={alt.url} target="_blank" rel="noreferrer"
+                                          style={{fontSize:10,...M,color:"#8DB5C8",display:"block",marginTop:3,
+                                            overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                                          🔗 {alt.url.replace(/^https?:\/\/(www\.)?/,"")}
+                                        </a>}
+                                        {alt.comment&&<div style={{fontSize:11,color:"#7A6A52",marginTop:3,fontStyle:"italic"}}>{alt.comment}</div>}
+                                        {/* Inline edit form */}
+                                        {isEditing&&!IS_VIEWER&&(
+                                          <div style={{marginTop:10,paddingTop:10,borderTop:"1px solid #DDD5C4"}}>
+                                            {[
+                                              {field:"name",    label:"НАЗВАНИЕ",     ph:"Диван Massimo", type:"text"},
+                                              {field:"url",     label:"ССЫЛКА",       ph:"https://...",   type:"text"},
+                                              {field:"price",   label:"ПОДОБРАНО (₽)",ph:"190000",        type:"number"},
+                                              {field:"paid",    label:"ОПЛАЧЕНО (₽)", ph:"0",             type:"number"},
+                                              {field:"comment", label:"КОММЕНТАРИЙ",  ph:"Детали...",     type:"text"},
+                                            ].map(({field,label,ph,type})=>(
+                                              <div key={field} style={{marginBottom:8}}>
+                                                <div style={{...M,fontSize:9,color:"#9A8A72",marginBottom:3}}>{label}</div>
+                                                <input type={type} placeholder={ph}
+                                                  value={alt[field]||""}
+                                                  onChange={e=>{
+                                                    const updated = {...alt,[field]:e.target.value};
+                                                    updSub(cat.id,sub.id,{alts:(sub.alts||[]).map(a=>a.id===alt.id?updated:a)});
+                                                  }}
+                                                  style={{width:"100%"}}/>
+                                              </div>
+                                            ))}
+                                            <ImagePicker
+                                              imageUrl={alt.imageUrl||""} imageData={alt.imageData||""} url={alt.url||""}
+                                              onChange={patch=>{
+                                                const updated={...alt,...patch};
+                                                updSub(cat.id,sub.id,{alts:(sub.alts||[]).map(a=>a.id===alt.id?updated:a)});
+                                              }}
+                                            />
+                                          </div>
+                                        )}
+                                      </div>
                                     </div>
                                   </div>
-                                  {alt.url&&<a href={alt.url} target="_blank" rel="noreferrer" style={{fontSize:10,...M,color:"#8DB5C8",display:"block",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🔗 {alt.url.replace(/^https?:\/\/(www\.)?/,"")}</a>}
-                                  {alt.comment&&<div style={{fontSize:11,color:"#7A6A52",marginTop:2,fontStyle:"italic"}}>{alt.comment}</div>}
-                                </div>
-                              </div>
-                            ))}
+                                );
+                              });
+                            })()}
                           </div>
                         </div>
                       )}
@@ -1116,24 +1261,36 @@ function App(){
     </div>
   )}
 
-  {/* ALT MODAL */}
+  {/* ADD VARIANT MODAL */}
   {!IS_VIEWER&&altModal&&(
     <div className="overlay" onClick={e=>{if(e.target===e.currentTarget)setAltModal(null)}}>
       <div className="modal">
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-          <div style={{fontSize:18,fontWeight:300}}>Добавить альтернативу</div>
+          <div style={{fontSize:18,fontWeight:300}}>Добавить вариант</div>
           <button className="icon-btn" style={{fontSize:18}} onClick={()=>setAltModal(null)}>✕</button>
         </div>
-        {[{field:"name",label:"НАЗВАНИЕ *",ph:"Диван Massimo"},{field:"url",label:"ССЫЛКА",ph:"https://"},{field:"price",label:"ЦЕНА (₽)",ph:"190000"},{field:"comment",label:"КОММЕНТАРИЙ",ph:"Детали..."}].map(({field,label,ph})=>(
+        {[
+          {field:"name",   label:"НАЗВАНИЕ *",       ph:"Диван Massimo MODERNO", type:"text"},
+          {field:"url",    label:"ССЫЛКА",            ph:"https://...",            type:"text"},
+          {field:"price",  label:"ПОДОБРАНО (₽)",    ph:"190000",                type:"number"},
+          {field:"paid",   label:"ОПЛАЧЕНО (₽)",     ph:"0",                     type:"number"},
+          {field:"comment",label:"КОММЕНТАРИЙ",      ph:"Цвет, размер, срок...", type:"text"},
+        ].map(({field,label,ph,type})=>(
           <div key={field} style={{marginBottom:10}}>
             <div style={{...M,fontSize:9,color:"#9A8A72",marginBottom:4}}>{label}</div>
-            <input type="text" placeholder={ph} value={newAlt[field]} onChange={e=>setNewAlt(p=>({...p,[field]:e.target.value}))} style={{width:"100%"}}/>
+            <input type={type} placeholder={ph} value={newAlt[field]}
+              onChange={e=>setNewAlt(p=>({...p,[field]:e.target.value}))} style={{width:"100%"}}/>
           </div>
         ))}
-        <div style={{marginBottom:12}}>
-          <ImagePicker imageUrl={newAlt.imageUrl} imageData={newAlt.imageData} url={newAlt.url} onChange={patch=>setNewAlt(p=>({...p,...patch}))}/>
+        <div style={{marginBottom:14}}>
+          <ImagePicker imageUrl={newAlt.imageUrl} imageData={newAlt.imageData} url={newAlt.url}
+            onChange={patch=>setNewAlt(p=>({...p,...patch}))}/>
         </div>
-        <button onClick={addAlt} style={{width:"100%",background:"#2C2416",color:"#F7F4EF",border:"none",padding:"10px",borderRadius:5,cursor:"pointer",...M,fontSize:11}}>ДОБАВИТЬ</button>
+        <button onClick={addAlt}
+          style={{width:"100%",background:"#2C2416",color:"#F7F4EF",border:"none",padding:"10px",
+            borderRadius:5,cursor:"pointer",...M,fontSize:11}}>
+          ДОБАВИТЬ ВАРИАНТ
+        </button>
       </div>
     </div>
   )}
