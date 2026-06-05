@@ -500,6 +500,7 @@ function App(){
   <div style={{background:"#2C2416",color:"#F7F4EF",padding:"22px 18px 0"}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
       <div style={{...M,fontSize:9,letterSpacing:".18em",color:"#C8A97E"}}>БЮДЖЕТ РЕМОНТА</div>
+      <div style={{...M,fontSize:9,color:"#5A4A32",marginLeft:8}}>v1.8</div>
       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
         {saveStatus==="saving"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#FDF5E4",color:"#8A6A12"}}>сохраняю…</span>}
         {saveStatus==="saved"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#E6F5EA",color:"#2A6A2A"}}>✓ сохранено</span>}
@@ -969,14 +970,19 @@ function App(){
                             🔗 {(()=>{try{return new URL(sub.url).hostname.replace("www.","")}catch(e){return sub.url.slice(0,30)}})()}
                           </a>}
                           {sub.comment&&<div style={{fontSize:12,color:"#7A6A52",marginTop:3,fontStyle:"italic"}}>{sub.comment}</div>}
-                          {/* Compact amounts when collapsed */}
-                          {!isSubOpen&&(sub.planned>0||sub.selected>0)&&(
-                            <div style={{display:"flex",gap:12,marginTop:5,...M,fontSize:11,color:"#7A6A52",flexWrap:"wrap"}}>
-                              {sub.planned>0&&<span>план: {fmt(sub.planned)}</span>}
-                              {sub.selected>0&&<span style={{color:"#5A9AB8"}}>подобрано: {fmt(sub.selected)}</span>}
-                              {sub.paid>0&&<span style={{color:"#4A9A5A"}}>оплачено: {fmt(sub.paid)}</span>}
-                            </div>
-                          )}
+                          {/* Compact amounts when collapsed — from active alt or planned */}
+                          {!isSubOpen&&(()=>{
+                            const activeAlt = sub.activeAltId&&(sub.alts||[]).find(a=>a.id===sub.activeAltId);
+                            const showPrice = activeAlt?.price || sub.selected || null;
+                            const showPaid  = activeAlt?.paid  || sub.paid    || null;
+                            return(sub.planned>0||showPrice)&&(
+                              <div style={{display:"flex",gap:10,marginTop:4,...M,fontSize:11,color:"#7A6A52",flexWrap:"wrap"}}>
+                                {sub.planned>0&&<span>план: {fmt(sub.planned)}</span>}
+                                {showPrice&&<span style={{color:"#5A9AB8"}}>подобрано: {Number(showPrice).toLocaleString("ru-RU")} ₽</span>}
+                                {showPaid&&<span style={{color:"#4A9A5A"}}>оплачено: {Number(showPaid).toLocaleString("ru-RU")} ₽</span>}
+                              </div>
+                            );
+                          })()}
                           {/* Room tags (always visible) */}
                           {(sub.roomIds||[]).length>0&&(
                             <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:5}}>
@@ -989,211 +995,245 @@ function App(){
                         </div>
                       </div>
 
-                      {/* Expanded sub */}
+                      {/* Expanded sub — header only, variants are the main content */}
                       {isSubOpen&&(
-                        <div style={{marginTop:14,paddingLeft:20}}>
-                          {/* Three amount fields */}
-                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:14}}>
-                            {[
-                              {field:"planned",  label:"ЗАПЛАНИРОВАНО", color:"#B8A878"},
-                              {field:"selected", label:"ПОДОБРАНО",     color:"#5A9AB8"},
-                              {field:"paid",     label:"ОПЛАЧЕНО",      color:"#4A9A5A"},
-                            ].map(({field,label,color})=>(
-                              <div key={field}>
-                                <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:5}}>
-                                  <div style={{width:7,height:7,borderRadius:"50%",background:color}}/>
-                                  <span style={{...M,fontSize:9,color:"#7A6A52"}}>{label}</span>
-                                </div>
-                                {IS_VIEWER
-                                  ? <div style={{...M,fontSize:14,color:"#2C2416"}}>{sub[field]>0?fmt(sub[field]):"—"}</div>
-                                  : <input type="number" placeholder="0" value={sub[field]||""}
-                                      onChange={e=>updSub(cat.id,sub.id,{[field]:Math.max(0,+e.target.value||0)})}/>
-                                }
-                              </div>
-                            ))}
-                          </div>
-                          {/* Diff summary */}
-                          { (() => { const a=actual(sub); const d=a-(sub.planned||0); const hasData=sub.selected>0||sub.paid>0;
-                            return hasData&&d!==0 ? (
-                            <div style={{...M,fontSize:11,marginBottom:12,padding:"6px 10px",borderRadius:6,
-                              background:d>0?"#FAE0D4":"#D4F0D4",color:d>0?"#8A2A1A":"#1A6A1A"}}>
-                              {d>0?"🔴 Перерасход":"🟢 Экономия"}: {fmt(Math.abs(d))}
-                              {sub.paid>0&&sub.selected>0?" (по оплате)":sub.paid>0?" (по оплате)":sub.selected>0?" (по подбору)":""}
-                            </div>) : null; })() }
-                          {!IS_VIEWER&&<>
-                            <div style={{marginBottom:8}}>
-                              <div style={{...M,fontSize:9,color:"#9A8A72",marginBottom:3}}>ССЫЛКА</div>
-                              <input type="text" placeholder="https://..." value={sub.url}
-                                onChange={e=>updSub(cat.id,sub.id,{url:e.target.value})} style={{width:"100%",marginBottom:8}}/>
-                              <ImagePicker imageUrl={sub.imageUrl} imageData={sub.imageData} url={sub.url}
-                                onChange={patch=>updSub(cat.id,sub.id,patch)}/>
-                            </div>
-                            <div style={{marginBottom:8}}>
-                              <div style={{...M,fontSize:9,color:"#9A8A72",marginBottom:3}}>КОММЕНТАРИЙ</div>
-                              <textarea placeholder="Заметки, детали, размеры, цвет..."
-                                value={sub.comment} onChange={e=>updSub(cat.id,sub.id,{comment:e.target.value})}
-                                style={{width:"100%",resize:"vertical",minHeight:36,height:"auto",
-                                  overflowY:"hidden", onInput:"this.style.height='auto';this.style.height=this.scrollHeight+'px'"}}
-                                onInput={e=>{e.target.style.height="auto";e.target.style.height=e.target.scrollHeight+"px";}}
-                              />
-                            </div>
-                            <div style={{marginBottom:10}}>
-                              <RoomPicker roomIds={sub.roomIds||[]}
-                                onChange={ids=>updSub(cat.id,sub.id,{roomIds:ids})}/>
-                            </div>
-                          </>}
-                          {IS_VIEWER&&sub.comment&&<div style={{marginBottom:10,fontSize:13,color:"#7A6A52",fontStyle:"italic"}}>{sub.comment}</div>}
-                          {(sub.roomIds||[]).length>0&&(
-                            <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:8}}>
-                              <span style={{...M,fontSize:9,color:"#9A8A72",marginRight:4}}>Помещения:</span>
-                              {(sub.roomIds||[]).map(rid=>{const r=ROOM_MAP[rid];return r?<span key={rid} style={{...M,fontSize:9,padding:"2px 7px",borderRadius:10,background:"#EDE7DC",color:"#5A4A32"}}>{r.icon} {r.label}</span>:null;})}
-                            </div>
-                          )}
-                          {IS_VIEWER&&sub.url&&<div style={{marginBottom:10}}><a href={sub.url} target="_blank" rel="noreferrer" style={{...M,fontSize:12,color:"#8DB5C8"}}>🔗 открыть</a></div>}
+                        <div style={{marginTop:10}}>
 
-                          {/* VIEW STATUS */}
-                          {!IS_VIEWER&&(
-                            <div style={{marginBottom:12}}>
-                              <div style={{...M,fontSize:9,color:"#9A8A72",marginBottom:6}}>ПРОСМОТР</div>
-                              <div style={{display:"flex",gap:6}}>
-                                {[{id:"none",label:"Нужно посмотреть"},{id:"skip",label:"Не нужно смотреть"},{id:"viewed",label:"Посмотрели"}].map(vs=>{
+                          {/* ── SUB META (plan, comment, rooms, view status) ── */}
+                          <div style={{background:"#FDFAF6",border:"1px solid #EDE7DC",borderRadius:6,
+                            padding:"10px 14px",marginBottom:12}}>
+
+                            {/* Plan amount */}
+                            {!IS_VIEWER&&(
+                              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                                <div style={{...M,fontSize:9,color:"#B8A878",flexShrink:0}}>ЗАПЛАНИРОВАНО</div>
+                                <input type="number" placeholder="0" value={sub.planned||""}
+                                  onChange={e=>updSub(cat.id,sub.id,{planned:Math.max(0,+e.target.value||0)})}
+                                  style={{width:110}}/>
+                                <div style={{...M,fontSize:9,color:"#9A8A72"}}>
+                                  — суммы подобрано/оплачено берутся из выбранного варианта
+                                </div>
+                              </div>
+                            )}
+                            {IS_VIEWER&&sub.planned>0&&(
+                              <div style={{...M,fontSize:11,color:"#B8A878",marginBottom:6}}>план: {fmt(sub.planned)}</div>
+                            )}
+
+                            {/* URL + image for sub itself (optional background info) */}
+                            {!IS_VIEWER&&(
+                              <div style={{marginBottom:8}}>
+                                <div style={{...M,fontSize:9,color:"#9A8A72",marginBottom:3}}>ССЫЛКА (опционально)</div>
+                                <input type="text" placeholder="https://..." value={sub.url}
+                                  onChange={e=>updSub(cat.id,sub.id,{url:e.target.value})} style={{width:"100%",marginBottom:8}}/>
+                                <ImagePicker imageUrl={sub.imageUrl} imageData={sub.imageData} url={sub.url}
+                                  onChange={patch=>updSub(cat.id,sub.id,patch)}/>
+                              </div>
+                            )}
+
+                            {/* Comment */}
+                            {!IS_VIEWER&&(
+                              <div style={{marginBottom:8}}>
+                                <div style={{...M,fontSize:9,color:"#9A8A72",marginBottom:3}}>КОММЕНТАРИЙ</div>
+                                <textarea placeholder="Заметки, детали, размеры, цвет..."
+                                  value={sub.comment} onChange={e=>updSub(cat.id,sub.id,{comment:e.target.value})}
+                                  style={{width:"100%",resize:"vertical",minHeight:36}}
+                                  onInput={e=>{e.target.style.height="auto";e.target.style.height=e.target.scrollHeight+"px";}}/>
+                              </div>
+                            )}
+                            {IS_VIEWER&&sub.comment&&(
+                              <div style={{fontSize:12,color:"#7A6A52",marginBottom:8,fontStyle:"italic"}}>{sub.comment}</div>
+                            )}
+
+                            {/* Rooms */}
+                            {!IS_VIEWER&&(
+                              <div style={{marginBottom:8}}>
+                                <RoomPicker roomIds={sub.roomIds||[]} onChange={ids=>updSub(cat.id,sub.id,{roomIds:ids})}/>
+                              </div>
+                            )}
+
+                            {/* View status */}
+                            <div>
+                              <div style={{...M,fontSize:9,color:"#9A8A72",marginBottom:5}}>ПРОСМОТР</div>
+                              <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                                {[{id:"none",label:"Нужно посмотреть"},{id:"skip",label:"Не нужно"},{id:"viewed",label:"✓ Посмотрели"}].map(vs=>{
                                   const active=(sub.viewStatus||"none")===vs.id;
-                                  return(
-                                    <button key={vs.id} onClick={()=>updSub(cat.id,sub.id,{viewStatus:vs.id})}
-                                      style={{background:active?"#2C2416":"none",color:active?"#F7F4EF":"#7A6A52",
-                                        border:"1px solid",borderColor:active?"#2C2416":"#DDD5C4",
-                                        padding:"4px 12px",borderRadius:12,cursor:"pointer",...M,fontSize:10}}>
-                                      {vs.id==="viewed"?"✓ ":""}{vs.label}
-                                    </button>
-                                  );
+                                  return IS_VIEWER
+                                    ? active&&<span key={vs.id} style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,
+                                        background:vs.id==="viewed"?"#E6F5EA":"#F5F0E8",
+                                        color:vs.id==="viewed"?"#2A6A2A":"#7A6A52"}}>{vs.label}</span>
+                                    : <button key={vs.id} onClick={()=>updSub(cat.id,sub.id,{viewStatus:vs.id})}
+                                        style={{background:active?"#2C2416":"none",color:active?"#F7F4EF":"#7A6A52",
+                                          border:"1px solid",borderColor:active?"#2C2416":"#DDD5C4",
+                                          padding:"3px 10px",borderRadius:10,cursor:"pointer",...M,fontSize:10}}>
+                                        {vs.label}
+                                      </button>;
                                 })}
                               </div>
                             </div>
-                          )}
-                          {IS_VIEWER&&sub.viewStatus==="viewed"&&(
-                            <div style={{...M,fontSize:10,color:"#4A9A5A",marginBottom:8}}>✓ Посмотрели</div>
-                          )}
+                          </div>
 
-                          {/* VARIANTS — all equal cards, active = green border + first */}
+                          {/* ── VARIANTS ── equal cards, active first with green border ── */}
                           <div>
                             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                              <div style={{...M,fontSize:9,color:"#9A8A72"}}>ВАРИАНТЫ</div>
-                              {!IS_VIEWER&&<button className="ghost-btn" onClick={()=>setAltModal({catId:cat.id,subId:sub.id})}>+ добавить вариант</button>}
+                              <span style={{...M,fontSize:10,color:"#9A8A72",letterSpacing:".06em"}}>
+                                ВАРИАНТЫ {sub.alts&&sub.alts.length>0&&`(${sub.alts.length})`}
+                              </span>
+                              {!IS_VIEWER&&<button className="ghost-btn"
+                                onClick={()=>setAltModal({catId:cat.id,subId:sub.id})}>
+                                + добавить вариант
+                              </button>}
                             </div>
+
+                            {(sub.alts&&sub.alts.length===0)&&!IS_VIEWER&&(
+                              <div style={{...M,fontSize:11,color:"#9A8A72",padding:"12px 0",textAlign:"center",
+                                borderRadius:6,border:"1px dashed #DDD5C4"}}>
+                                Добавь варианты — цены будут браться из выбранного
+                              </div>
+                            )}
+
                             {[...(sub.alts||[])].sort((a,b)=>
                               a.id===sub.activeAltId?-1:b.id===sub.activeAltId?1:0
                             ).map(alt=>{
                               const isActive=alt.id===sub.activeAltId;
                               const altSrc=alt.imageData||alt.imageUrl||null;
                               const isEditing=editAlt&&editAlt.altId===alt.id;
-                              const updateAlt=patch=>{
-                                updSub(cat.id,sub.id,{alts:(sub.alts||[]).map(a=>a.id===alt.id?{...a,...patch}:a)});
-                              };
+                              const updateAlt=patch=>updSub(cat.id,sub.id,{
+                                alts:(sub.alts||[]).map(a=>a.id===alt.id?{...a,...patch}:a)
+                              });
+
                               return(
                                 <div key={alt.id} style={{
                                   borderRadius:8,marginBottom:8,overflow:"hidden",
                                   border:isActive?"2px solid #4A9A5A":"1px solid #DDD5C4",
-                                  background:isActive?"#F0F8F2":"white"
+                                  background:isActive?"#F0F8F2":"white",
+                                  transition:"border-color .2s,background .2s"
                                 }}>
-                                  {/* Card header row */}
-                                  <div style={{display:"flex",gap:0,alignItems:"stretch"}}>
-                                    {/* Image — left side, fixed square */}
-                                    <div style={{width:72,flexShrink:0,background:"#F5F2EE",
-                                      display:"flex",alignItems:"center",justifyContent:"center",
-                                      cursor:alt.url?"pointer":"default",position:"relative"}}
+                                  <div style={{display:"flex",alignItems:"stretch"}}>
+
+                                    {/* Left: image block */}
+                                    <div style={{width:80,minHeight:80,flexShrink:0,
+                                      background:"#F5F2EE",display:"flex",alignItems:"center",
+                                      justifyContent:"center",cursor:alt.url?"pointer":"default",
+                                      position:"relative",borderRight:"1px solid #EDE7DC"}}
                                       onClick={()=>alt.url&&window.open(alt.url,"_blank")}>
                                       {altSrc
-                                        ? <img src={altSrc} alt=""
-                                            style={{width:72,height:72,objectFit:"contain",background:"#F5F2EE"}}/>
+                                        ? <img src={altSrc} alt="" style={{width:80,height:80,objectFit:"contain"}}
+                                            onError={e=>e.target.style.display="none"}/>
                                         : <span style={{fontSize:22,opacity:.2}}>📷</span>
                                       }
-                                      {isActive&&<div style={{position:"absolute",top:4,left:4,width:10,height:10,
-                                        borderRadius:"50%",background:"#4A9A5A"}}/>}
+                                      {isActive&&<div style={{position:"absolute",top:5,left:5,
+                                        width:10,height:10,borderRadius:"50%",background:"#4A9A5A",
+                                        boxShadow:"0 0 0 2px white"}}/>}
                                     </div>
-                                    {/* Content */}
+
+                                    {/* Right: content */}
                                     <div style={{flex:1,minWidth:0,padding:"10px 12px"}}>
-                                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6,marginBottom:5}}>
-                                        {isEditing
-                                          ? <input type="text" value={alt.name||""} onChange={e=>updateAlt({name:e.target.value})}
-                                              style={{fontSize:13,fontFamily:"'Cormorant Garamond',serif",border:"none",
-                                                borderBottom:"1px solid #C8A97E",background:"transparent",flex:1,color:"#2C2416"}}/>
-                                          : <span style={{fontSize:13,lineHeight:1.3}}>{alt.name}</span>
+
+                                      {/* Row 1: name + action buttons */}
+                                      <div style={{display:"flex",justifyContent:"space-between",
+                                        alignItems:"flex-start",gap:8,marginBottom:6}}>
+                                        {isEditing&&!IS_VIEWER
+                                          ? <input type="text" value={alt.name||""} placeholder="Название модели"
+                                              onChange={e=>updateAlt({name:e.target.value})}
+                                              style={{fontSize:13,fontFamily:"'Cormorant Garamond',serif",
+                                                border:"none",borderBottom:"1px solid #C8A97E",
+                                                background:"transparent",flex:1,color:"#2C2416",padding:"0 0 2px"}}/>
+                                          : <span style={{fontSize:14,lineHeight:1.3,flex:1}}>{alt.name||"Без названия"}</span>
                                         }
-                                        {!IS_VIEWER&&<div style={{display:"flex",gap:3,flexShrink:0}}>
-                                          {!isActive&&<button onClick={()=>updSub(cat.id,sub.id,{activeAltId:alt.id})}
-                                            style={{...M,fontSize:9,padding:"2px 7px",borderRadius:6,
-                                              background:"none",border:"1px solid #4A9A5A",color:"#4A9A5A",cursor:"pointer"}}>
-                                            ✓ выбрать
-                                          </button>}
-                                          {isActive&&<button onClick={()=>updSub(cat.id,sub.id,{activeAltId:null})}
-                                            style={{...M,fontSize:9,padding:"2px 7px",borderRadius:6,
-                                              background:"#4A9A5A",border:"none",color:"white",cursor:"pointer"}}>
-                                            ✓ основной
-                                          </button>}
-                                          <button className="icon-btn" style={{fontSize:11}}
-                                            onClick={()=>setEditAlt(isEditing?null:{catId:cat.id,subId:sub.id,altId:alt.id})}>
-                                            ✏️
-                                          </button>
-                                          <button className="icon-btn" style={{fontSize:11,color:"#C8A0A0"}}
-                                            onClick={()=>{
-                                              removeAlt(cat.id,sub.id,alt.id);
-                                              if(sub.activeAltId===alt.id) updSub(cat.id,sub.id,{activeAltId:null});
-                                            }}>✕</button>
-                                        </div>}
-                                        {IS_VIEWER&&isActive&&<span style={{...M,fontSize:9,padding:"2px 7px",
-                                          borderRadius:6,background:"#4A9A5A",color:"white"}}>✓ основной</span>}
+                                        {!IS_VIEWER&&(
+                                          <div style={{display:"flex",gap:4,flexShrink:0,alignItems:"center"}}>
+                                            {!isActive&&(
+                                              <button onClick={()=>updSub(cat.id,sub.id,{activeAltId:alt.id})}
+                                                style={{...M,fontSize:10,padding:"3px 10px",borderRadius:6,
+                                                  background:"none",border:"1px solid #4A9A5A",
+                                                  color:"#4A9A5A",cursor:"pointer",whiteSpace:"nowrap"}}>
+                                                ✓ выбрать
+                                              </button>
+                                            )}
+                                            {isActive&&(
+                                              <button onClick={()=>updSub(cat.id,sub.id,{activeAltId:null})}
+                                                style={{...M,fontSize:10,padding:"3px 10px",borderRadius:6,
+                                                  background:"#4A9A5A",border:"none",
+                                                  color:"white",cursor:"pointer",whiteSpace:"nowrap"}}>
+                                                ✓ выбран
+                                              </button>
+                                            )}
+                                            <button className="icon-btn" style={{fontSize:12}}
+                                              onClick={()=>setEditAlt(isEditing?null:{catId:cat.id,subId:sub.id,altId:alt.id})}>
+                                              ✏️
+                                            </button>
+                                            <button className="icon-btn" style={{fontSize:12,color:"#C8A0A0"}}
+                                              onClick={()=>{
+                                                removeAlt(cat.id,sub.id,alt.id);
+                                                if(sub.activeAltId===alt.id) updSub(cat.id,sub.id,{activeAltId:null});
+                                              }}>✕</button>
+                                          </div>
+                                        )}
+                                        {IS_VIEWER&&isActive&&(
+                                          <span style={{...M,fontSize:10,padding:"3px 9px",borderRadius:6,
+                                            background:"#4A9A5A",color:"white",flexShrink:0}}>✓ выбран</span>
+                                        )}
                                       </div>
-                                      {/* Prices */}
-                                      <div style={{display:"flex",gap:10,...M,fontSize:11,flexWrap:"wrap"}}>
+
+                                      {/* Row 2: prices */}
+                                      <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:isEditing?8:4}}>
                                         {isEditing
                                           ? <>
-                                              <div style={{display:"flex",alignItems:"center",gap:4}}>
-                                                <span style={{color:"#9A8A72",fontSize:9}}>ПОДОБРАНО</span>
+                                              <label style={{display:"flex",alignItems:"center",gap:5}}>
+                                                <span style={{...M,fontSize:9,color:"#5A9AB8"}}>ПОДОБРАНО</span>
                                                 <input type="number" value={alt.price||""} placeholder="0"
-                                                  onChange={e=>updateAlt({price:e.target.value})} style={{width:80}}/>
-                                              </div>
-                                              <div style={{display:"flex",alignItems:"center",gap:4}}>
-                                                <span style={{color:"#9A8A72",fontSize:9}}>ОПЛАЧЕНО</span>
+                                                  onChange={e=>updateAlt({price:e.target.value})} style={{width:90}}/>
+                                              </label>
+                                              <label style={{display:"flex",alignItems:"center",gap:5}}>
+                                                <span style={{...M,fontSize:9,color:"#4A9A5A"}}>ОПЛАЧЕНО</span>
                                                 <input type="number" value={alt.paid||""} placeholder="0"
-                                                  onChange={e=>updateAlt({paid:e.target.value})} style={{width:80}}/>
-                                              </div>
+                                                  onChange={e=>updateAlt({paid:e.target.value})} style={{width:90}}/>
+                                              </label>
                                             </>
                                           : <>
-                                              {alt.price&&<span style={{color:"#5A9AB8"}}>подобрано: {Number(alt.price).toLocaleString("ru-RU")} ₽</span>}
-                                              {alt.paid&&<span style={{color:"#4A9A5A"}}>оплачено: {Number(alt.paid).toLocaleString("ru-RU")} ₽</span>}
+                                              {alt.price&&<span style={{...M,fontSize:11,color:"#5A9AB8"}}>
+                                                подобрано: {Number(alt.price).toLocaleString("ru-RU")} ₽
+                                              </span>}
+                                              {alt.paid&&<span style={{...M,fontSize:11,color:"#4A9A5A"}}>
+                                                оплачено: {Number(alt.paid).toLocaleString("ru-RU")} ₽
+                                              </span>}
                                             </>
                                         }
                                       </div>
-                                      {/* URL */}
+
+                                      {/* Row 3: URL */}
                                       {isEditing
                                         ? <input type="text" value={alt.url||""} placeholder="https://..."
                                             onChange={e=>updateAlt({url:e.target.value})}
-                                            style={{width:"100%",marginTop:5}}/>
+                                            style={{width:"100%",marginBottom:6}}/>
                                         : alt.url&&<a href={alt.url} target="_blank" rel="noreferrer"
-                                            style={{fontSize:10,...M,color:"#8DB5C8",display:"block",marginTop:4,
+                                            style={{...M,fontSize:10,color:"#8DB5C8",display:"block",marginBottom:4,
                                               overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                                            🔗 {(()=>{try{return new URL(alt.url).hostname.replace("www.","")}catch(e){return alt.url.slice(0,30)}})()}
+                                            🔗 {(()=>{try{return new URL(alt.url).hostname.replace("www.","")}catch(e){return alt.url.slice(0,35)}})()}
                                           </a>
                                       }
-                                      {/* Comment */}
+
+                                      {/* Row 4: comment */}
                                       {isEditing
                                         ? <textarea value={alt.comment||""} placeholder="Комментарий..."
                                             onChange={e=>updateAlt({comment:e.target.value})}
                                             onInput={e=>{e.target.style.height="auto";e.target.style.height=e.target.scrollHeight+"px";}}
-                                            style={{width:"100%",marginTop:5,resize:"vertical",minHeight:32}}/>
-                                        : alt.comment&&<div style={{fontSize:11,color:"#7A6A52",marginTop:4,fontStyle:"italic"}}>{alt.comment}</div>
+                                            style={{width:"100%",resize:"vertical",minHeight:32,marginBottom:6}}/>
+                                        : alt.comment&&<div style={{fontSize:11,color:"#7A6A52",fontStyle:"italic"}}>{alt.comment}</div>
                                       }
-                                      {/* Image picker when editing */}
-                                      {isEditing&&<div style={{marginTop:8}}>
+
+                                      {/* Image picker (editing) */}
+                                      {isEditing&&(
                                         <ImagePicker imageUrl={alt.imageUrl||""} imageData={alt.imageData||""} url={alt.url||""}
                                           onChange={patch=>updateAlt(patch)}/>
-                                      </div>}
+                                      )}
                                     </div>
                                   </div>
                                 </div>
                               );
                             })}
                           </div>
+
                         </div>
                       )}
                     </div>
