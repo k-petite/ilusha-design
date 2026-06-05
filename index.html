@@ -894,18 +894,26 @@ function App(){
                           onClick={()=>setOpenSubs(p=>({...p,[sub.id]:!p[sub.id]}))}>
                           <span style={{fontSize:11}}>{isSubOpen?"▾":"▸"}</span>
                         </button>
-                        {/* Thumbnail */}
-                        {subSrc
-                          ? <img src={subSrc} alt="" style={{width:48,height:48,objectFit:"contain",background:"#F9F6F1",borderRadius:6,border:"1px solid #EDE7DC",flexShrink:0,cursor:sub.url?"pointer":"default"}}
-                              onClick={()=>sub.url&&window.open(sub.url,"_blank")} onError={e=>e.target.style.display="none"}/>
-                          : !IS_VIEWER&&<div onClick={()=>setOpenSubs(p=>({...p,[sub.id]:true}))}
-                              style={{width:48,height:48,borderRadius:6,border:"1px dashed #DDD5C4",flexShrink:0,
-                                display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",background:"#FDFAF6"}}
-                              onMouseEnter={e=>e.currentTarget.style.borderColor="#C8A97E"}
-                              onMouseLeave={e=>e.currentTarget.style.borderColor="#DDD5C4"}>
-                              <span style={{fontSize:16,opacity:.4}}>📷</span>
-                            </div>
-                        }
+                        {/* Thumbnail — active alt image takes priority */}
+                        {(()=>{
+                          const activeAlt = sub.activeAltId && (sub.alts||[]).find(a=>a.id===sub.activeAltId);
+                          const thumbSrc = (activeAlt&&(activeAlt.imageData||activeAlt.imageUrl)) || subSrc;
+                          const thumbUrl = (activeAlt&&activeAlt.url) || sub.url;
+                          return thumbSrc
+                            ? <img src={thumbSrc} alt=""
+                                style={{width:52,height:52,objectFit:"contain",background:"#F9F6F1",
+                                  borderRadius:6,border:sub.activeAltId?"2px solid #4A9A5A":"1px solid #EDE7DC",
+                                  flexShrink:0,cursor:thumbUrl?"pointer":"default"}}
+                                onClick={()=>thumbUrl&&window.open(thumbUrl,"_blank")}
+                                onError={e=>e.target.style.display="none"}/>
+                            : !IS_VIEWER&&<div onClick={()=>setOpenSubs(p=>({...p,[sub.id]:true}))}
+                                style={{width:52,height:52,borderRadius:6,border:"1px dashed #DDD5C4",flexShrink:0,
+                                  display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",background:"#FDFAF6"}}
+                                onMouseEnter={e=>e.currentTarget.style.borderColor="#C8A97E"}
+                                onMouseLeave={e=>e.currentTarget.style.borderColor="#DDD5C4"}>
+                                <span style={{fontSize:16,opacity:.4}}>📷</span>
+                              </div>;
+                        })()}
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6,flexWrap:"wrap"}}>
                             {!IS_VIEWER&&isSubOpen
@@ -919,7 +927,9 @@ function App(){
                               {/* View status badge */}
                               {sub.viewStatus==="viewed"
                                 ? <span style={{...M,fontSize:9,padding:"2px 7px",borderRadius:8,background:"#E6F5EA",color:"#2A6A2A"}}>✓ посмотрели</span>
-                                : <span style={{...M,fontSize:9,padding:"2px 7px",borderRadius:8,background:"#F5F0E8",color:"#9A8A72"}}>👁 посмотреть</span>
+                                : sub.viewStatus==="skip"
+                                  ? <span style={{...M,fontSize:9,padding:"2px 7px",borderRadius:8,background:"#F0EAE0",color:"#7A6A52"}}>— не нужно</span>
+                                  : <span style={{...M,fontSize:9,padding:"2px 7px",borderRadius:8,background:"#F5F0E8",color:"#9A8A72"}}>👁 посмотреть</span>
                               }
                               {/* Active alt badge */}
                               {sub.activeAltId&&(()=>{
@@ -934,8 +944,9 @@ function App(){
                             </div>
                           </div>
                           {sub.url&&<a href={sub.url} target="_blank" rel="noreferrer"
-                            style={{fontSize:11,...M,color:"#8DB5C8",display:"block",marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:240}}>
-                            🔗 {sub.url.replace(/^https?:\/\/(www\.)?/,"")}
+                            style={{fontSize:10,...M,color:"#8DB5C8",display:"inline-block",marginTop:3,
+                              overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:180,verticalAlign:"bottom"}}>
+                            🔗 {(()=>{try{return new URL(sub.url).hostname.replace("www.","")}catch(e){return sub.url.slice(0,30)}})()}
                           </a>}
                           {sub.comment&&<div style={{fontSize:12,color:"#7A6A52",marginTop:3,fontStyle:"italic"}}>{sub.comment}</div>}
                           {/* Compact amounts when collapsed */}
@@ -990,18 +1001,21 @@ function App(){
                               {sub.paid>0&&sub.selected>0?" (по оплате)":sub.paid>0?" (по оплате)":sub.selected>0?" (по подбору)":""}
                             </div>) : null; })() }
                           {!IS_VIEWER&&<>
-                            <div style={{marginBottom:10}}>
-                              <div style={{...M,fontSize:9,color:"#9A8A72",marginBottom:4}}>ССЫЛКА НА ТОВАР</div>
+                            <div style={{marginBottom:8}}>
+                              <div style={{...M,fontSize:9,color:"#9A8A72",marginBottom:3}}>ССЫЛКА</div>
                               <input type="text" placeholder="https://..." value={sub.url}
-                                onChange={e=>updSub(cat.id,sub.id,{url:e.target.value})} style={{width:"100%",marginBottom:10}}/>
+                                onChange={e=>updSub(cat.id,sub.id,{url:e.target.value})} style={{width:"100%",marginBottom:8}}/>
                               <ImagePicker imageUrl={sub.imageUrl} imageData={sub.imageData} url={sub.url}
                                 onChange={patch=>updSub(cat.id,sub.id,patch)}/>
                             </div>
-                            <div style={{marginBottom:10}}>
-                              <div style={{...M,fontSize:9,color:"#9A8A72",marginBottom:4}}>КОММЕНТАРИЙ</div>
-                              <textarea rows={2} placeholder="Заметки, детали, размеры, цвет..."
+                            <div style={{marginBottom:8}}>
+                              <div style={{...M,fontSize:9,color:"#9A8A72",marginBottom:3}}>КОММЕНТАРИЙ</div>
+                              <textarea placeholder="Заметки, детали, размеры, цвет..."
                                 value={sub.comment} onChange={e=>updSub(cat.id,sub.id,{comment:e.target.value})}
-                                style={{width:"100%",resize:"vertical"}}/>
+                                style={{width:"100%",resize:"vertical",minHeight:36,height:"auto",
+                                  overflowY:"hidden", onInput:"this.style.height='auto';this.style.height=this.scrollHeight+'px'"}}
+                                onInput={e=>{e.target.style.height="auto";e.target.style.height=e.target.scrollHeight+"px";}}
+                              />
                             </div>
                             <div style={{marginBottom:10}}>
                               <RoomPicker roomIds={sub.roomIds||[]}
@@ -1022,7 +1036,7 @@ function App(){
                             <div style={{marginBottom:12}}>
                               <div style={{...M,fontSize:9,color:"#9A8A72",marginBottom:6}}>ПРОСМОТР</div>
                               <div style={{display:"flex",gap:6}}>
-                                {[{id:"none",label:"Нужно посмотреть"},{id:"viewed",label:"Посмотрели"}].map(vs=>{
+                                {[{id:"none",label:"Нужно посмотреть"},{id:"skip",label:"Не нужно смотреть"},{id:"viewed",label:"Посмотрели"}].map(vs=>{
                                   const active=(sub.viewStatus||"none")===vs.id;
                                   return(
                                     <button key={vs.id} onClick={()=>updSub(cat.id,sub.id,{viewStatus:vs.id})}
