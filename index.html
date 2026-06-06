@@ -130,6 +130,9 @@ const fmt  = n => { const v=parseFloat(n); return (!v||isNaN(v))?"—":new Intl.
 const fmtK = n => { const v=parseFloat(n); if(!v||isNaN(v)||v<=0) return "—"; return (v>=1e6?(v/1e6).toFixed(1)+"М":Math.round(v/1e3)+"К")+" ₽"; };
 const pct  = (a,b) => b===0?0:Math.min(100,Math.round(a/b*100));
 
+// Find reserve sub in a category
+const findReserveSub = cat => (cat.subs||[]).find(s=>s.name&&s.name.includes('Резерв'));
+
 // ── DERIVED CALCS ──
 
 // actualCost per sub: paid > selected > planned
@@ -299,15 +302,16 @@ function ImagePicker({imageUrl,imageData,onChange}){
 // ── DIFF BADGE — shows delta vs planned using actualCost ──
 function DiffBadge({sub}){
   if(!sub) return null;
+  if(!isSelected(sub)) return null; // only show if something actually selected
   const a = actual(sub);
-  // only show diff if something is filled in beyond planned
-  if(!sub.selected && !sub.paid) return null;
-  const diff = a - (sub.planned||0);
-  if(diff===0) return null;
+  if(a===0) return null;
+  const diff = a - toNum(sub.planned);
+  if(Math.abs(diff) < 100) return null; // ignore tiny differences
   const over = diff > 0;
   return(
-    <span style={{fontFamily:"'DM Mono',monospace",fontSize:10,padding:"1px 7px",borderRadius:8,
-      background:over?"#FAE0D4":"#D4F0D4",color:over?"#8A2A1A":"#1A6A1A",flexShrink:0}}>
+    <span style={{fontFamily:"'DM Mono',monospace",fontSize:10,padding:"2px 8px",borderRadius:8,
+      background:over?"#FAE0D4":"#D4F0D4",color:over?"#8A2A1A":"#1A6A1A",
+      flexShrink:0,fontWeight:500}}>
       {over?"🔴 +":"🟢 "}{fmt(Math.abs(diff))}
     </span>
   );
@@ -683,7 +687,7 @@ function App(){
   <div style={{background:"#2C2416",color:"#F7F4EF",padding:"22px 18px 0"}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
       <div style={{...M,fontSize:9,letterSpacing:".18em",color:"#C8A97E"}}>БЮДЖЕТ РЕМОНТА</div>
-      <div style={{...M,fontSize:9,color:"#5A4A32",marginLeft:8}}>v3.2</div>
+      <div style={{...M,fontSize:9,color:"#5A4A32",marginLeft:8}}>v3.3</div>
       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
         {saveStatus==="saving"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#FDF5E4",color:"#8A6A12"}}>сохраняю…</span>}
         {saveStatus==="saved"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#E6F5EA",color:"#2A6A2A"}}>✓ сохранено</span>}
@@ -1245,6 +1249,30 @@ function App(){
                               }
 
                               <DiffBadge sub={sub}/>
+                              {!IS_VIEWER&&isSelected(sub)&&actual(sub)>toNum(sub.planned)+100&&(()=>{
+                                const diff=actual(sub)-toNum(sub.planned);
+                                return(
+                                  <button
+                                    title={`Повысить план до ${fmt(actual(sub))} — спишется из резерва`}
+                                    onClick={e=>{
+                                      e.stopPropagation();
+                                      setCats(prev=>prev.map(c=>{
+                                        if(c.id!==cat.id)return c;
+                                        const resSub=findReserveSub(c);
+                                        return {...c,subs:c.subs.map(s=>{
+                                          if(s.id===sub.id) return {...s,planned:actual(s)};
+                                          if(resSub&&s.id===resSub.id) return {...s,planned:Math.max(0,toNum(s.planned)-diff)};
+                                          return s;
+                                        })};
+                                      }));
+                                    }}
+                                    style={{...M,fontSize:9,padding:"2px 8px",borderRadius:6,
+                                      background:"none",border:"1px solid #E8937A",color:"#C05030",
+                                      cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>
+                                    ↑ план из резерва
+                                  </button>
+                                );
+                              })()}
                               {sub.alts&&sub.alts.length>0&&<span className="badge" style={{background:"#EDE7DC",color:"#7A6A52"}}>{sub.alts.length} вар.</span>}
                               {!IS_VIEWER&&<button className="icon-btn" title="Удалить"
                                 onClick={e=>{e.stopPropagation();setDeleteModal({msg:`Удалить позицию «${sub.name}»?`,onConfirm:()=>setCats(p=>p.map(c=>c.id!==cat.id?c:{...c,subs:c.subs.filter(s=>s.id!==sub.id)}))});}}
@@ -1314,14 +1342,25 @@ function App(){
 
                             {/* Plan amount */}
                             {!IS_VIEWER&&(
-                              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10,flexWrap:"wrap"}}>
                                 <div style={{...M,fontSize:9,color:"#B8A878",flexShrink:0}}>ЗАПЛАНИРОВАНО</div>
                                 <input type="number" placeholder="0" value={sub.planned||""}
                                   onChange={e=>updSub(cat.id,sub.id,{planned:Math.max(0,+e.target.value||0)})}
                                   style={{width:110}}/>
-                                <div style={{...M,fontSize:9,color:"#9A8A72"}}>
-                                  — суммы подобрано берутся из выбранного варианта
-                                </div>
+                                {isSelected(sub)&&(()=>{
+                                  const a=actual(sub);
+                                  const diff=a-toNum(sub.planned);
+                                  if(Math.abs(diff)<100) return null;
+                                  const over=diff>0;
+                                  const resSub=findReserveSub(cat);
+                                  return(
+                                    <span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:6,
+                                      background:over?"#FAE0D4":"#D4F0D4",color:over?"#8A2A1A":"#1A6A1A"}}>
+                                      {over?"🔴 подобрано дороже на":"🟢 экономия "}{fmt(Math.abs(diff))}
+                                      {resSub&&` · резерв: ${fmt(toNum(resSub.planned))}`}
+                                    </span>
+                                  );
+                                })()}
                               </div>
                             )}
                             {IS_VIEWER&&sub.planned>0&&(
@@ -1383,9 +1422,30 @@ function App(){
                               const isActive=alt.id===sub.activeAltId;
                               const altSrc=alt.imageData||alt.imageUrl||null;
                               const isEditing=editAlt&&editAlt.altId===alt.id;
-                              const updateAlt=patch=>updSub(cat.id,sub.id,{
-                                alts:(sub.alts||[]).map(a=>a.id===alt.id?{...a,...patch}:a)
-                              });
+                              const updateAlt=patch=>{
+                                const newAlts=(sub.alts||[]).map(a=>a.id===alt.id?{...a,...patch}:a);
+                                const updatedSub={...sub,alts:newAlts};
+                                // Auto-rebalance reserve if this is the active alt and price changed
+                                if(alt.id===sub.activeAltId && (patch.unitPrice!==undefined||patch.qty!==undefined||patch.paid!==undefined)){
+                                  const oldActual=actual(sub);
+                                  const newActual=actual(updatedSub);
+                                  const diff=oldActual-newActual; // positive=savings, negative=more expensive
+                                  if(diff!==0){
+                                    setCats(prev=>prev.map(c=>{
+                                      if(c.id!==cat.id)return c;
+                                      const resSub=findReserveSub(c);
+                                      if(!resSub)return {...c,subs:c.subs.map(s=>s.id===sub.id?updatedSub:s)};
+                                      return {...c,subs:c.subs.map(s=>{
+                                        if(s.id===sub.id) return updatedSub;
+                                        if(s.id===resSub.id) return {...s,planned:Math.max(0,toNum(s.planned)+diff)};
+                                        return s;
+                                      })};
+                                    }));
+                                    return;
+                                  }
+                                }
+                                updSub(cat.id,sub.id,{alts:newAlts});
+                              };
 
                               return(
                                 <div key={alt.id}
