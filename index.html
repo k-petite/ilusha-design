@@ -135,20 +135,39 @@ const findReserveSub = cat => (cat.subs||[]).find(s=>s.name&&s.name.includes('Р
 
 // ── DERIVED CALCS ──
 
-// actualCost per sub: paid > selected > planned
 const toNum = v => { const n=parseFloat(v); return isNaN(n)?0:n; };
-// Compute effective price for an alt (unitPrice * qty if set, else price)
+
+// altPrice: unitPrice*qty → price (for a variant/alt object)
 const altPrice = a => {
   if(!a) return 0;
   const up = toNum(a.unitPrice);
   const qty = toNum(a.qty)||1;
   if(up>0) return up*qty;
-  // legacy: price field (before unitPrice was introduced)
   return toNum(a.price);
 };
 
-// actualCost per sub: paid > selected > 0 (NOT planned — planned is budget, not actual)
-// isSelected = true if sub has real price data (active alt with price, or paid/selected fields)
+// actualCost: the ONE function for everything.
+// Priority: paid → selectedPrice → planned
+// paid and selectedPrice come from activeAlt if set, else from sub fields.
+const actual = s => {
+  if(!s) return toNum(s?.planned);
+  // 1. From active alt
+  if(s.activeAltId && s.alts && s.alts.length>0) {
+    const a = s.alts.find(x=>x.id===s.activeAltId);
+    if(a) {
+      if(toNum(a.paid)>0) return toNum(a.paid);       // paid from alt
+      const ap = altPrice(a);
+      if(ap>0) return ap;                              // selected price from alt
+    }
+  }
+  // 2. From sub-level fields (legacy or manual)
+  if(toNum(s.paid)>0)     return toNum(s.paid);
+  if(toNum(s.selected)>0) return toNum(s.selected);
+  // 3. Fallback to planned (reserve subs, unselected items — all use planned)
+  return toNum(s.planned);
+};
+
+// isSelected: true if sub has a real price (not just planned fallback)
 const isSelected = s => {
   if(!s) return false;
   if(s.activeAltId && s.alts && s.alts.length>0) {
@@ -158,93 +177,86 @@ const isSelected = s => {
   return toNum(s.paid)>0 || toNum(s.selected)>0;
 };
 
-const actual = s => {
-  if(!s) return 0;
-  // If an active alternative is set, pull its paid/price
-  if(s.activeAltId && s.alts && s.alts.length>0) {
-    const a = s.alts.find(x=>x.id===s.activeAltId);
-    if(a) {
-      if(toNum(a.paid)>0) return toNum(a.paid);
-      const ap = altPrice(a);
-      if(ap>0) return ap;
-    }
-  }
-  if(toNum(s.paid)>0) return toNum(s.paid);
-  if(toNum(s.selected)>0) return toNum(s.selected);
-  // NO fallback to planned — unselected items don't count as "actual"
-  return 0;
-};
-// Get selected/paid from active alt or sub fields
-const subSelected = s => {
-  if(!s) return 0;
-  if(s.activeAltId && s.alts) {
-    const a = s.alts.find(x=>x.id===s.activeAltId);
-    const ap=altPrice(a); if(ap>0) return ap;
-  }
-  return s.selected||0;
-};
+// subPaid: paid portion only (for К оплате calculation)
 const subPaid = s => {
   if(!s) return 0;
   if(s.activeAltId && s.alts) {
     const a = s.alts.find(x=>x.id===s.activeAltId);
-    if(a && a.paid && +a.paid>0) return +a.paid;
+    if(a && toNum(a.paid)>0) return toNum(a.paid);
   }
-  return s.paid||0;
+  return toNum(s.paid);
+};
+
+// subSelected: selected price (paid excluded)
+const subSelected = s => {
+  if(!s) return 0;
+  if(s.activeAltId && s.alts) {
+    const a = s.alts.find(x=>x.id===s.activeAltId);
+    if(a) { const ap=altPrice(a); if(ap>0) return ap; }
+  }
+  return toNum(s.selected);
 };
 
 function calcCat(cat) {
-  const subs = cat.subs||[];
-  const planned    = subs.reduce((s,x)=>s+toNum(x.planned), 0);
-  const selected   = subs.reduce((s,x)=>s+toNum(subSelected(x)), 0);
-  const paid       = subs.reduce((s,x)=>s+toNum(subPaid(x)), 0);
-  // actualSum = only items where something was actually selected/paid
-  const actualSum  = subs.reduce((s,x)=>s+actual(x), 0);
-  // delta = difference only for items that have been selected
-  const selectedSubs = subs.filter(x=>isSelected(x));
+  const subs     = cat.subs||[];
+  const planned  = subs.reduce((s,x)=>s+toNum(x.planned), 0);
+  const paid     = subs.reduce((s,x)=>s+subPaid(x), 0);
+  const selected = subs.reduce((s,x)=>s+subSelected(x), 0);
+  // actualSum = Σ actualCost — single source of truth
+  const actualSum = subs.reduce((s,x)=>s+actual(x), 0);
+  // delta = actualSum vs planned (only for items that have real prices)
+  const selectedSubs = subs.filter(isSelected);
   const plannedOfSelected = selectedSubs.reduce((s,x)=>s+toNum(x.planned), 0);
-  const delta = actualSum - plannedOfSelected;
-  const limit      = toNum(cat.limit) || 0;
-  const overLimit  = limit > 0 ? actualSum - limit : 0;
-  return { planned, selected, paid, actualSum, delta, limit, overLimit };
+  const delta = selectedSubs.length>0 ? actualSum - (planned - (planned - plannedOfSelected) - (planned-plannedOfSelected)) : 0;
+  // Simpler: delta = (sum of actual for selected) - (sum of planned for selected)
+  const actualOfSelected  = selectedSubs.reduce((s,x)=>s+actual(x), 0);
+  const delta2 = actualOfSelected - plannedOfSelected;
+  const limit     = toNum(cat.limit) || 0;
+  const overLimit = limit > 0 ? actualSum - limit : 0;
+  return { planned, selected, paid, actualSum, delta:delta2, limit, overLimit };
 }
 
 function calcProject(cats, roughData) {
   const rd = roughData || {planned:ROUGH_PLANNED, paid:0};
-  const CEILING = TOTAL_BUDGET + BASE_RESERVE; // 4 000 000
+  const CEILING = TOTAL_BUDGET + BASE_RESERVE;
 
   if(!cats||!cats.length) {
-    const used = rd.planned;
+    const roughActual = toNum(rd.paid)>0 ? toNum(rd.paid) : toNum(rd.planned);
     return {
       flexPlanned:0, flexActual:0, flexPaid:0, selected:0,
-      totalPlanned:rd.planned, totalPaid:rd.paid||0, toPay:rd.planned,
-      roughPlanned:rd.planned, roughPaid:rd.paid||0,
-      used, available: CEILING - used,
-      overBase: Math.max(0, used - TOTAL_BUDGET),
+      totalPlanned:toNum(rd.planned), totalPaid:toNum(rd.paid)||0, toPay:roughActual,
+      roughPlanned:toNum(rd.planned), roughPaid:toNum(rd.paid)||0,
+      used:roughActual, available:CEILING-roughActual,
+      overBase:Math.max(0,roughActual-TOTAL_BUDGET),
       savings:0, overruns:0,
     };
   }
-  const allSubs      = cats.flatMap(c=>c.subs||[]);
-  const flexPlanned  = allSubs.reduce((s,x)=>s+toNum(x.planned), 0);
-  const selected     = allSubs.reduce((s,x)=>s+toNum(subSelected(x)), 0);
-  const flexPaid     = allSubs.reduce((s,x)=>s+toNum(subPaid(x)), 0);
-  const flexActual   = allSubs.reduce((s,x)=>s+actual(x), 0);
-  // savings/overruns only for items that have been selected
-  const savings  = allSubs.filter(isSelected).reduce((s,x)=>s+Math.max(0,toNum(x.planned)-actual(x)), 0);
-  const overruns = allSubs.filter(isSelected).reduce((s,x)=>s+Math.max(0,actual(x)-toNum(x.planned)), 0);
-  const totalPlanned = flexPlanned + rd.planned;
-  const totalPaid    = flexPaid + (rd.paid||0);
-  const toPay        = Math.max(0, flexActual - flexPaid) + Math.max(0, (rd.planned||ROUGH_PLANNED) - (rd.paid||0));
+  const allSubs   = cats.flatMap(c=>c.subs||[]);
+  const flexPlanned = allSubs.reduce((s,x)=>s+toNum(x.planned), 0);
+  const flexPaid    = allSubs.reduce((s,x)=>s+subPaid(x), 0);
+  const selected    = allSubs.reduce((s,x)=>s+subSelected(x), 0);
+  // flexActual = Σ actual(sub) for all subs — includes planned fallback for unselected
+  const flexActual  = allSubs.reduce((s,x)=>s+actual(x), 0);
 
-  // USED = actualCost всех позиций (план/подобрано) + черновые
-  const used      = flexActual + (rd.planned||ROUGH_PLANNED);
-  // AVAILABLE = потолок 4М − использовано (реагирует на любое изменение)
+  // savings/overruns only for items with real prices
+  const selectedSubs = allSubs.filter(isSelected);
+  const savings  = selectedSubs.reduce((s,x)=>s+Math.max(0,toNum(x.planned)-actual(x)), 0);
+  const overruns = selectedSubs.reduce((s,x)=>s+Math.max(0,actual(x)-toNum(x.planned)), 0);
+
+  // roughActual: paid if paid, else planned
+  const roughActual = toNum(rd.paid)>0 ? toNum(rd.paid) : toNum(rd.planned);
+  const totalPlanned = flexPlanned + toNum(rd.planned);
+  const totalPaid    = flexPaid + toNum(rd.paid);
+  // toPay = what's left to pay (actual - paid)
+  const toPay = Math.max(0, flexActual - flexPaid) + Math.max(0, roughActual - toNum(rd.paid));
+  // used = totalActual including rough
+  const used      = flexActual + roughActual;
   const available = CEILING - used;
-  // Сколько вышли за исходный бюджет 3.5М (0 если не вышли)
   const overBase  = Math.max(0, used - TOTAL_BUDGET);
 
   return { flexPlanned, flexActual, flexPaid, selected,
            totalPlanned, totalPaid, toPay,
-           roughPlanned:rd.planned, roughPaid:rd.paid||0,
+           roughPlanned:toNum(rd.planned), roughPaid:toNum(rd.paid),
            used, available, overBase,
            savings, overruns };
 }
@@ -774,7 +786,7 @@ function App(){
   <div style={{background:"#2C2416",color:"#F7F4EF",padding:"22px 18px 0"}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
       <div style={{...M,fontSize:9,letterSpacing:".18em",color:"#C8A97E"}}>БЮДЖЕТ РЕМОНТА</div>
-      <div style={{...M,fontSize:9,color:"#5A4A32",marginLeft:8}}>v3.7</div>
+      <div style={{...M,fontSize:9,color:"#5A4A32",marginLeft:8}}>v3.8</div>
       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
         {saveStatus==="saving"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#FDF5E4",color:"#8A6A12"}}>сохраняю…</span>}
         {saveStatus==="saved"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#E6F5EA",color:"#2A6A2A"}}>✓ сохранено</span>}
@@ -822,7 +834,7 @@ function App(){
           {/* 2. Подобрано */}
           <div>
             <div style={{...M,fontSize:9,letterSpacing:".08em",color:"#8A7A62",marginBottom:4}}>ПОДОБРАНО</div>
-            <div style={{fontSize:16,fontWeight:300,color:"#F7F4EF"}}>{fmtK(totalSelected)}</div>
+            <div style={{fontSize:16,fontWeight:300,color:"#F7F4EF"}}>{fmtK(proj.used)}</div>
             <div style={{...M,fontSize:9,color:"#6A5A42",marginTop:2}}>
               {proj.flexActual>0?`реально: ${fmtK(proj.flexActual)}`:"остальное — по плану"}
             </div>
@@ -831,12 +843,17 @@ function App(){
           {/* 3. Изменение от плана */}
           <div>
             <div style={{...M,fontSize:9,letterSpacing:".08em",color:"#8A7A62",marginBottom:4}}>ИЗМЕНЕНИЕ ОТ ПЛАНА</div>
-            <div style={{fontSize:16,fontWeight:300,
-              color:changeDiff>100?"#F0A070":changeDiff<-100?"#90D4A0":"#F7F4EF"}}>
-              {Math.abs(changeDiff)<100?"—":changeDiff>0?"+"+fmtK(changeDiff):"−"+fmtK(-changeDiff)}
-            </div>
+            {(()=>{
+              const diff = proj.used - proj.totalPlanned;
+              return(
+                <div style={{fontSize:16,fontWeight:300,
+                  color:diff>100?"#F0A070":diff<-100?"#90D4A0":"#F7F4EF"}}>
+                  {Math.abs(diff)<100?"—":diff>0?"+"+fmtK(diff):"−"+fmtK(-diff)}
+                </div>
+              );
+            })()}
             <div style={{...M,fontSize:9,color:"#6A5A42",marginTop:2}}>
-              {changeDiff>100?"дороже плана":changeDiff<-100?"дешевле плана":"совпадает с планом"}
+              {(proj.used-proj.totalPlanned)>100?"дороже плана":(proj.used-proj.totalPlanned)<-100?"дешевле плана":"совпадает с планом"}
             </div>
           </div>
 
