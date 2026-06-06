@@ -109,6 +109,8 @@ const DEFAULT_CATS = [
            mk("Зеркала",9400), mk("Шторы и тюль",700),
            mk("Постельное бельё + подушки",11800), mk("Картины, вазы, декор",4700),
            mk("Кухня: сантехника + аксессуары",18000) ] },
+  { id:"reserve_new", limit:200000, name:"Запас на новые статьи", icon:"🗂", color:"#A8B8C8",
+    subs:[ mk("Резерв на новые позиции",200000) ] },
 ];
 
 const ROUGH_GROUPS = [
@@ -577,12 +579,12 @@ function App(){
     *{box-sizing:border-box;}
 
     /* ── DESKTOP BASE (zoom effect via font-size) ── */
-    html{font-size:16px;}
+    html{font-size:17px;}
     body{font-size:1rem;}
 
     input[type=text],input[type=number],textarea,select{
-      font-family:'DM Mono',monospace;font-size:13px;color:#2C2416;
-      background:#FDFAF6;border:1px solid #DDD5C4;border-radius:3px;padding:5px 8px;
+      font-family:'DM Mono',monospace;font-size:14px;color:#2C2416;
+      background:#FDFAF6;border:1px solid #DDD5C4;border-radius:3px;padding:6px 9px;
     }
     input:focus,textarea:focus,select:focus{outline:none;border-color:#C8A97E;background:white;}
     input[type=number]{width:100px;text-align:right;}
@@ -598,8 +600,8 @@ function App(){
     .exp-btn:hover{opacity:.7;}
 
     /* Bold category and sub names */
-    .cat-name{font-weight:600;font-size:17px;}
-    .sub-name{font-weight:500;font-size:15px;}
+    .cat-name{font-weight:700;font-size:20px;letter-spacing:-.01em;}
+    .sub-name{font-weight:600;font-size:17px;}
 
     .sub-sep{border-bottom:1px solid #F5F0E8;padding:14px 0;}
     .sub-sep:last-child{border-bottom:none;}
@@ -664,7 +666,7 @@ function App(){
   <div style={{background:"#2C2416",color:"#F7F4EF",padding:"22px 18px 0"}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
       <div style={{...M,fontSize:9,letterSpacing:".18em",color:"#C8A97E"}}>БЮДЖЕТ РЕМОНТА</div>
-      <div style={{...M,fontSize:9,color:"#5A4A32",marginLeft:8}}>v2.9</div>
+      <div style={{...M,fontSize:9,color:"#5A4A32",marginLeft:8}}>v3.0</div>
       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
         {saveStatus==="saving"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#FDF5E4",color:"#8A6A12"}}>сохраняю…</span>}
         {saveStatus==="saved"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#E6F5EA",color:"#2A6A2A"}}>✓ сохранено</span>}
@@ -790,6 +792,7 @@ function App(){
         {[
           {name:"Черновые работы", planned:roughData.planned||ROUGH_PLANNED, selected:0, paid:roughData.paid||0, color:"#C8A97E", note:"А4РЕМОНТ", fixed:true},
           ...cats.map(c=>{const cc=calcCat(c);return{name:c.icon+" "+c.name,planned:cc.planned,actualSum:cc.actualSum,paid:cc.paid,delta:cc.delta,color:c.color,catId:c.id,fixed:false};}),
+          {name:"🗂 Запас на новые статьи", planned:200000, color:"#A8B8C8", note:"буфер для позиций которые добавятся", fixed:true, reserve:true},
         ].map((item,i)=>{
           const isOver = item.delta>0;
           const hasData = item.actualSum>0 && item.actualSum!==item.planned;
@@ -849,77 +852,6 @@ function App(){
       {/* 🎉 ILUSHA METER */}
       <IlushaMeter card={card} M={M}/>
 
-      {/* BUDGET LIMITS BY CATEGORY */}
-      <div style={card}>
-        <div style={{...M,fontSize:10,color:"#9A8A72",letterSpacing:".1em",marginBottom:14}}>ЛИМИТЫ ПО КАТЕГОРИЯМ (OPTIMA)</div>
-        {cats.map(cat=>{
-          const cc=calcCat(cat);
-          if(!cc.limit) return null;
-          const usedPct=Math.min(100,Math.round(cc.actualSum/cc.limit*100));
-          const over=cc.overLimit>0;
-          const planPct=Math.min(100,Math.round(cc.planned/cc.limit*100));
-          const barColor=over?"#E8937A":usedPct>85?"#D4C87E":"#4A9A5A";
-          return(
-            <div key={cat.id} style={{marginBottom:14}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:5}}>
-                <div style={{display:"flex",alignItems:"center",gap:6,flex:1}}>
-                  <span style={{fontSize:14}}>{cat.icon} {cat.name}</span>
-                  {over&&<span style={{...M,fontSize:10,padding:"1px 7px",borderRadius:8,background:"#FAE0D4",color:"#8A2A1A"}}>
-                    🔴 +{fmt(cc.overLimit)}
-                  </span>}
-                  {!over&&cc.limit>0&&cc.actualSum<cc.limit&&cc.actualSum>0&&(
-                    <span style={{...M,fontSize:10,padding:"1px 7px",borderRadius:8,background:"#D4F0D4",color:"#1A6A1A"}}>
-                      🟢 -{fmt(cc.limit-cc.actualSum)}
-                    </span>
-                  )}
-                </div>
-                <div style={{display:"flex",alignItems:"center",gap:8}}>
-                  {!IS_VIEWER&&(
-                    <div style={{display:"flex",alignItems:"center",gap:3}}>
-                      <span style={{...M,fontSize:9,color:"#9A8A72"}}>лимит:</span>
-                      <input type="number" value={cat.limit||""}
-                        onChange={e=>setCats(p=>p.map(c=>c.id!==cat.id?c:{...c,limit:toNum(e.target.value)}))}
-                        style={{width:80,textAlign:"right",...M,fontSize:10}}/>
-                    </div>
-                  )}
-                  <div style={{textAlign:"right"}}>
-                    <div style={{...M,fontSize:12}}>
-                      <span style={{color:over?"#C05030":"#2C2416"}}>{fmt(cc.actualSum)}</span>
-                      <span style={{color:"#9A8A72"}}> / {fmt(cc.limit)}</span>
-                    </div>
-                    <div style={{...M,fontSize:10,color:"#9A8A72"}}>
-                      план {fmt(cc.planned)} · {usedPct}%
-                    </div>
-                  </div>
-                </div>
-              </div>
-              {/* Bar: planned (light) + actual (solid) vs limit */}
-              <div style={{height:8,background:"#EDE7DC",borderRadius:4,overflow:"hidden",position:"relative"}}>
-                {/* Planned fill (light) */}
-                <div style={{position:"absolute",left:0,top:0,height:"100%",
-                  width:`${planPct}%`,background:cat.color,opacity:.3,borderRadius:4}}/>
-                {/* Actual fill (solid) */}
-                <div style={{position:"absolute",left:0,top:0,height:"100%",
-                  width:`${usedPct}%`,background:barColor,borderRadius:4,transition:"width .4s"}}/>
-              </div>
-              {/* Sub-items with overrun */}
-              {cat.subs.filter(s=>{
-                const a=actual(s); return cc.limit>0 && a>toNum(s.planned) && toNum(s.planned)>0;
-              }).map(s=>(
-                <div key={s.id} style={{...M,fontSize:10,color:"#8A2A1A",marginTop:3,paddingLeft:8}}>
-                  ↳ {s.name}: план {fmt(toNum(s.planned))}, факт {fmt(actual(s))} (+{fmt(actual(s)-toNum(s.planned))})
-                </div>
-              ))}
-            </div>
-          );
-        })}
-        <div style={{paddingTop:10,borderTop:"1px solid #EDE7DC",display:"flex",justifyContent:"space-between"}}>
-          <span style={{...M,fontSize:11,color:"#7A6A52"}}>Итого по лимитам OPTIMA</span>
-          <span style={{...M,fontSize:13}}>
-            {fmt(cats.reduce((s,c)=>s+(calcCat(c).limit||0),0))}
-          </span>
-        </div>
-      </div>
 
             <div style={{...card,background:"#FDF5E4",border:"1px solid #E8D8A0"}}>
         <div style={{...M,fontSize:10,color:"#7A5A12",marginBottom:8}}>⚠ КЛЮЧЕВЫЕ МОМЕНТЫ</div>
@@ -1201,18 +1133,6 @@ function App(){
             </div>
 
             {/* Cat totals row */}
-            {cc.limit>0&&(
-              <div style={{...M,fontSize:10,marginBottom:6,display:"flex",alignItems:"center",gap:8}}>
-                <span style={{color:"#9A8A72",flexShrink:0}}>Лимит: {fmt(cc.limit)}</span>
-                <div style={{flex:1,height:4,background:"#EDE7DC",borderRadius:2,overflow:"hidden"}}>
-                  <div style={{width:`${Math.min(100,Math.round(cc.actualSum/cc.limit*100))}%`,
-                    height:"100%",background:cc.overLimit>0?"#E8937A":"#4A9A5A",borderRadius:2,transition:"width .4s"}}/>
-                </div>
-                <span style={{color:cc.overLimit>0?"#C05030":"#4A9A5A",flexShrink:0}}>
-                  {cc.overLimit>0?`🔴 +${fmt(cc.overLimit)}`:fmt(cc.limit-cc.actualSum)+" свободно"}
-                </span>
-              </div>
-            )}
             <div className="cat-totals" style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6,marginBottom:isCatOpen?12:0}}>
               {[
                 {l:"Запланировано", v:cc.planned,    bg:"#F5F0E4", c:"#7A6A52"},
@@ -1369,7 +1289,7 @@ function App(){
 
                       {/* Expanded sub — header only, variants are the main content */}
                       {isSubOpen&&(
-                        <div style={{marginTop:10,paddingLeft:16,borderLeft:"2px solid #EDE7DC"}}>
+                        <div style={{marginTop:10,marginLeft:80,borderLeft:"2px solid #EDE7DC",paddingLeft:12}}>
 
                           {/* ── SUB META (plan, comment, rooms, view status) ── */}
                           <div style={{background:"#FDFAF6",border:"1px solid #EDE7DC",borderRadius:6,
