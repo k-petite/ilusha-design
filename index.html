@@ -389,6 +389,92 @@ function AltComment({comment, M}){
   );
 }
 
+// ── TRANSFER RESERVE ──
+function TransferReserve({cats, setCats, findReserveSub, M, fmt, onClose}){
+  const [fromCatId,setFromCatId]=useState("");
+  const [toCatId,setToCatId]=useState("");
+  const [amount,setAmount]=useState("");
+
+  const catsWithReserve = cats.filter(c=>findReserveSub(c)&&toNum(findReserveSub(c).planned)>0);
+  const fromReserve = fromCatId ? toNum(findReserveSub(cats.find(c=>c.id===fromCatId))?.planned) : 0;
+
+  const doTransfer = () => {
+    const amt = Math.min(toNum(amount), fromReserve);
+    if(!amt||!fromCatId||!toCatId||fromCatId===toCatId) return;
+    setCats(prev=>prev.map(c=>{
+      const resSub=findReserveSub(c);
+      if(!resSub) return c;
+      if(c.id===fromCatId) return {...c,subs:c.subs.map(s=>s.id===resSub.id?{...s,planned:Math.max(0,toNum(s.planned)-amt)}:s)};
+      if(c.id===toCatId)   return {...c,subs:c.subs.map(s=>s.id===resSub.id?{...s,planned:toNum(s.planned)+amt}:s)};
+      return c;
+    }));
+    onClose();
+  };
+
+  return(
+    <div>
+      <div style={{...M,fontSize:11,color:"#7A6A52",marginBottom:14,lineHeight:1.6}}>
+        Перенести свободный резерв из одной категории в другую.
+        Резерв — это подкатегория "🗂 Резерв категории" внутри каждой категории.
+      </div>
+      {/* Reserves overview */}
+      <div style={{background:"#F5F0E8",borderRadius:6,padding:"10px 12px",marginBottom:14}}>
+        {cats.map(c=>{
+          const r=findReserveSub(c);
+          if(!r) return null;
+          const rp=toNum(r.planned);
+          return(
+            <div key={c.id} style={{display:"flex",justifyContent:"space-between",...M,fontSize:11,marginBottom:4}}>
+              <span>{c.icon} {c.name}</span>
+              <span style={{color:rp>0?"#4A9A5A":"#9A8A72"}}>{rp>0?fmt(rp):"нет резерва"}</span>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+        <div>
+          <div style={{...M,fontSize:9,color:"#9A8A72",marginBottom:4}}>ИЗ КАТЕГОРИИ</div>
+          <select value={fromCatId} onChange={e=>setFromCatId(e.target.value)}
+            style={{width:"100%",...M,fontSize:12}}>
+            <option value="">выбери...</option>
+            {catsWithReserve.map(c=>(
+              <option key={c.id} value={c.id}>{c.icon} {c.name} ({fmt(toNum(findReserveSub(c).planned))})</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <div style={{...M,fontSize:9,color:"#9A8A72",marginBottom:4}}>В КАТЕГОРИЮ</div>
+          <select value={toCatId} onChange={e=>setToCatId(e.target.value)}
+            style={{width:"100%",...M,fontSize:12}}>
+            <option value="">выбери...</option>
+            {cats.filter(c=>c.id!==fromCatId).map(c=>(
+              <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <div style={{marginBottom:14}}>
+        <div style={{...M,fontSize:9,color:"#9A8A72",marginBottom:4}}>
+          СУММА (доступно: {fromReserve>0?fmt(fromReserve):"—"})
+        </div>
+        <input type="number" placeholder="0" value={amount}
+          onChange={e=>setAmount(e.target.value)}
+          max={fromReserve} style={{width:"100%"}}/>
+        {fromReserve>0&&<button onClick={()=>setAmount(String(fromReserve))}
+          style={{...M,fontSize:10,color:"#C8A97E",background:"none",border:"none",cursor:"pointer",marginTop:4,padding:0}}>
+          перенести весь резерв ({fmt(fromReserve)})
+        </button>}
+      </div>
+      <button onClick={doTransfer}
+        disabled={!amount||!fromCatId||!toCatId||fromCatId===toCatId}
+        style={{width:"100%",background:amount&&fromCatId&&toCatId&&fromCatId!==toCatId?"#2C2416":"#9A8A72",
+          color:"#F7F4EF",border:"none",padding:"10px",borderRadius:5,cursor:"pointer",...M,fontSize:11}}>
+        ПЕРЕНЕСТИ
+      </button>
+    </div>
+  );
+}
+
 // ── ILUSHA METER ──
 function IlushaMeter({card,M}){
   const [ilusha,setIlusha]=useState(42);
@@ -465,6 +551,7 @@ function App(){
   const [exportModal,setExportModal]=useState(false);
   const [exportText,setExportText]  =useState("");
   const [deleteModal,setDeleteModal]=useState(null); // {msg, onConfirm}
+  const [transferModal,setTransferModal]=useState(false);
   const saveTimer=useRef(null);
   const importRef=useRef();
 
@@ -687,7 +774,7 @@ function App(){
   <div style={{background:"#2C2416",color:"#F7F4EF",padding:"22px 18px 0"}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
       <div style={{...M,fontSize:9,letterSpacing:".18em",color:"#C8A97E"}}>БЮДЖЕТ РЕМОНТА</div>
-      <div style={{...M,fontSize:9,color:"#5A4A32",marginLeft:8}}>v3.4</div>
+      <div style={{...M,fontSize:9,color:"#5A4A32",marginLeft:8}}>v3.5</div>
       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
         {saveStatus==="saving"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#FDF5E4",color:"#8A6A12"}}>сохраняю…</span>}
         {saveStatus==="saved"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#E6F5EA",color:"#2A6A2A"}}>✓ сохранено</span>}
@@ -697,7 +784,8 @@ function App(){
               {lastSync&&<span style={{...M,fontSize:9,color:"#6A5A42"}}>{lastSync.toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})}</span>}
               <button onClick={()=>window.location.reload()} style={{background:"none",border:"1px solid #4A6A7A",color:"#8ABACA",padding:"5px 10px",borderRadius:4,cursor:"pointer",...M,fontSize:10}}>↻</button>
             </>
-          : <><button onClick={handleExport} style={{background:"none",border:"1px solid #4A6A5A",color:"#8ACAAA",padding:"5px 10px",borderRadius:4,cursor:"pointer",...M,fontSize:10}}>↓ экспорт</button>
+          : <><button onClick={()=>setTransferModal(true)} style={{background:"none",border:"1px solid #6A5A4A",color:"#CAB89A",padding:"5px 10px",borderRadius:4,cursor:"pointer",...M,fontSize:10}}>⇄ резерв</button>
+              <button onClick={handleExport} style={{background:"none",border:"1px solid #4A6A5A",color:"#8ACAAA",padding:"5px 10px",borderRadius:4,cursor:"pointer",...M,fontSize:10}}>↓ экспорт</button>
               <button onClick={()=>window.print()} style={{background:"none",border:"1px solid #6A5A7A",color:"#B8A8CA",padding:"5px 10px",borderRadius:4,cursor:"pointer",...M,fontSize:10}}>🖨 печать</button>
               <button onClick={()=>importRef.current.click()} style={{background:"none",border:"1px solid #4A5A6A",color:"#8AAACA",padding:"5px 10px",borderRadius:4,cursor:"pointer",...M,fontSize:10}}>↑ импорт</button>
               <input ref={importRef} type="file" accept=".json" style={{display:"none"}} onChange={handleImport}/>
@@ -713,43 +801,42 @@ function App(){
       const inBase  = proj.used <= TOTAL_BUDGET;
       const inCeil  = proj.used <= ceiling;
       const usedPct = Math.min(100, Math.round(proj.used / ceiling * 100));
+      const allSubs = cats.flatMap(c=>c.subs||[]);
+      // Подобрано: для выбранных — реальная цена; для невыбранных — план
+      const totalSelected = allSubs.reduce((s,x)=>
+        isSelected(x) ? s+actual(x) : s+toNum(x.planned), 0
+      ) + (roughData.planned||ROUGH_PLANNED);
+      const changeDiff = totalSelected - proj.totalPlanned;
 
       return(<div>
         {/* 4 main cards */}
         <div className="hdr-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,marginBottom:12}}>
 
-          {/* 1. Бюджет */}
+          {/* 1. Запланировано */}
           <div>
-            <div style={{...M,fontSize:9,letterSpacing:".08em",color:"#8A7A62",marginBottom:4}}>БЮДЖЕТ</div>
-            <div style={{fontSize:16,fontWeight:300,color:"#C8A97E"}}>{fmtK(TOTAL_BUDGET)}</div>
+            <div style={{...M,fontSize:9,letterSpacing:".08em",color:"#8A7A62",marginBottom:4}}>ЗАПЛАНИРОВАНО</div>
+            <div style={{fontSize:16,fontWeight:300,color:"#C8A97E"}}>{fmtK(proj.totalPlanned)}</div>
+            <div style={{...M,fontSize:9,color:"#6A5A42",marginTop:2}}>черновые + категории</div>
+          </div>
+
+          {/* 2. Подобрано */}
+          <div>
+            <div style={{...M,fontSize:9,letterSpacing:".08em",color:"#8A7A62",marginBottom:4}}>ПОДОБРАНО</div>
+            <div style={{fontSize:16,fontWeight:300,color:"#F7F4EF"}}>{fmtK(totalSelected)}</div>
             <div style={{...M,fontSize:9,color:"#6A5A42",marginTop:2}}>
-              потолок {fmtK(ceiling)}
+              {proj.flexActual>0?`реально: ${fmtK(proj.flexActual)}`:"остальное — по плану"}
             </div>
           </div>
 
-          {/* 2. Использовано */}
+          {/* 3. Изменение от плана */}
           <div>
-            <div style={{...M,fontSize:9,letterSpacing:".08em",color:"#8A7A62",marginBottom:4}}>ИСПОЛЬЗОВАНО</div>
-            <div style={{fontSize:16,fontWeight:300,color:"#F7F4EF"}}>{fmtK(proj.used)}</div>
-            <div style={{...M,fontSize:9,color:"#6A5A42",marginTop:2}}>
-              план / подобрано / оплачено
-            </div>
-          </div>
-
-          {/* 3. Доступно */}
-          <div>
-            <div style={{...M,fontSize:9,letterSpacing:".08em",color:"#8A7A62",marginBottom:4}}>ДОСТУПНО</div>
+            <div style={{...M,fontSize:9,letterSpacing:".08em",color:"#8A7A62",marginBottom:4}}>ИЗМЕНЕНИЕ ОТ ПЛАНА</div>
             <div style={{fontSize:16,fontWeight:300,
-              color:!inCeil?"#F0A070":!inBase?"#F0C060":"#90D4A0"}}>
-              {proj.available>=0?fmtK(proj.available):"−"+fmtK(-proj.available)}
+              color:changeDiff>100?"#F0A070":changeDiff<-100?"#90D4A0":"#F7F4EF"}}>
+              {Math.abs(changeDiff)<100?"—":changeDiff>0?"+"+fmtK(changeDiff):"−"+fmtK(-changeDiff)}
             </div>
             <div style={{...M,fontSize:9,color:"#6A5A42",marginTop:2}}>
-              {!inCeil
-                ? "⛔ превышен потолок 4М"
-                : !inBase
-                  ? `⚠ из резерва: ${fmtK(proj.overBase)}`
-                  : `в бюджете, резерв +${fmtK(TOTAL_BUDGET-proj.used)}`
-              }
+              {changeDiff>100?"дороже плана":changeDiff<-100?"дешевле плана":"совпадает с планом"}
             </div>
           </div>
 
@@ -1356,7 +1443,7 @@ function App(){
                                   return(
                                     <span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:6,
                                       background:over?"#FAE0D4":"#D4F0D4",color:over?"#8A2A1A":"#1A6A1A"}}>
-                                      {over?"🔴 подобрано дороже на":"🟢 экономия "}{fmt(Math.abs(diff))}
+                                      {over?"🔴 подобрано дороже на ":"🟢 экономия "}{fmt(Math.abs(diff))}
                                       {resSub&&` · резерв: ${fmt(toNum(resSub.planned))}`}
                                     </span>
                                   );
@@ -1914,6 +2001,20 @@ function App(){
     </div>
   )}
 
+
+
+  {/* TRANSFER RESERVE MODAL */}
+  {transferModal&&(
+    <div className="overlay" onClick={e=>{if(e.target===e.currentTarget)setTransferModal(false)}}>
+      <div className="modal" style={{maxWidth:480}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+          <div style={{fontSize:18,fontWeight:300}}>Перенос резерва между категориями</div>
+          <button className="icon-btn" style={{fontSize:18}} onClick={()=>setTransferModal(false)}>✕</button>
+        </div>
+        <TransferReserve cats={cats} setCats={setCats} findReserveSub={findReserveSub} M={M} fmt={fmt} onClose={()=>setTransferModal(false)}/>
+      </div>
+    </div>
+  )}
 
   {/* DELETE CONFIRMATION MODAL */}
   {deleteModal&&(
