@@ -687,7 +687,7 @@ function App(){
   <div style={{background:"#2C2416",color:"#F7F4EF",padding:"22px 18px 0"}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
       <div style={{...M,fontSize:9,letterSpacing:".18em",color:"#C8A97E"}}>БЮДЖЕТ РЕМОНТА</div>
-      <div style={{...M,fontSize:9,color:"#5A4A32",marginLeft:8}}>v3.3</div>
+      <div style={{...M,fontSize:9,color:"#5A4A32",marginLeft:8}}>v3.4</div>
       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
         {saveStatus==="saving"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#FDF5E4",color:"#8A6A12"}}>сохраняю…</span>}
         {saveStatus==="saved"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#E6F5EA",color:"#2A6A2A"}}>✓ сохранено</span>}
@@ -1425,19 +1425,21 @@ function App(){
                               const updateAlt=patch=>{
                                 const newAlts=(sub.alts||[]).map(a=>a.id===alt.id?{...a,...patch}:a);
                                 const updatedSub={...sub,alts:newAlts};
-                                // Auto-rebalance reserve if this is the active alt and price changed
+                                // Auto-add savings to reserve when price drops below plan
+                                // But do NOT auto-deduct from reserve when price exceeds plan
                                 if(alt.id===sub.activeAltId && (patch.unitPrice!==undefined||patch.qty!==undefined||patch.paid!==undefined)){
                                   const oldActual=actual(sub);
                                   const newActual=actual(updatedSub);
-                                  const diff=oldActual-newActual; // positive=savings, negative=more expensive
-                                  if(diff!==0){
+                                  const savings=oldActual-newActual; // positive=cheaper, negative=more expensive
+                                  // Only auto-update reserve if new price is BELOW plan (savings)
+                                  if(savings!==0 && newActual<=toNum(sub.planned)){
                                     setCats(prev=>prev.map(c=>{
                                       if(c.id!==cat.id)return c;
                                       const resSub=findReserveSub(c);
                                       if(!resSub)return {...c,subs:c.subs.map(s=>s.id===sub.id?updatedSub:s)};
                                       return {...c,subs:c.subs.map(s=>{
                                         if(s.id===sub.id) return updatedSub;
-                                        if(s.id===resSub.id) return {...s,planned:Math.max(0,toNum(s.planned)+diff)};
+                                        if(s.id===resSub.id) return {...s,planned:Math.max(0,toNum(s.planned)+savings)};
                                         return s;
                                       })};
                                     }));
