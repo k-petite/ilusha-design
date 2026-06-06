@@ -598,7 +598,7 @@ function App(){
   <div style={{background:"#2C2416",color:"#F7F4EF",padding:"22px 18px 0"}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
       <div style={{...M,fontSize:9,letterSpacing:".18em",color:"#C8A97E"}}>БЮДЖЕТ РЕМОНТА</div>
-      <div style={{...M,fontSize:9,color:"#5A4A32",marginLeft:8}}>v2.7</div>
+      <div style={{...M,fontSize:9,color:"#5A4A32",marginLeft:8}}>v2.8</div>
       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
         {saveStatus==="saving"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#FDF5E4",color:"#8A6A12"}}>сохраняю…</span>}
         {saveStatus==="saved"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#E6F5EA",color:"#2A6A2A"}}>✓ сохранено</span>}
@@ -723,29 +723,61 @@ function App(){
         <div style={{...M,fontSize:10,color:"#9A8A72",letterSpacing:".1em",marginBottom:12}}>СТРУКТУРА БЮДЖЕТА</div>
         {[
           {name:"Черновые работы", planned:roughData.planned||ROUGH_PLANNED, selected:0, paid:roughData.paid||0, color:"#C8A97E", note:"А4РЕМОНТ", fixed:true},
-          ...cats.map(c=>{const cc=calcCat(c);return{name:c.icon+" "+c.name,planned:cc.planned,actualSum:cc.actualSum,paid:cc.paid,delta:cc.delta,color:c.color};}),
-        ].map((item,i)=>(
-          <div key={i} style={{padding:"10px 0",borderBottom:"1px solid #F5F0E8"}}>
+          ...cats.map(c=>{const cc=calcCat(c);return{name:c.icon+" "+c.name,planned:cc.planned,actualSum:cc.actualSum,paid:cc.paid,delta:cc.delta,color:c.color,catId:c.id,fixed:false};}),
+        ].map((item,i)=>{
+          const isOver = item.delta>0;
+          const hasData = item.actualSum>0 && item.actualSum!==item.planned;
+          return(
+          <div key={i}
+            onClick={()=>{
+              if(item.catId){
+                setTab("flexible");
+                setOpenCats(p=>({...p,[item.catId]:true}));
+                setTimeout(()=>{
+                  const el=document.getElementById("cat-"+item.catId);
+                  if(el) el.scrollIntoView({behavior:"smooth",block:"start"});
+                },100);
+              }
+            }}
+            style={{padding:"10px 0",borderBottom:"1px solid #F5F0E8",
+              cursor:item.catId?"pointer":"default",
+              background:isOver?"#FEF8F8":"transparent",
+              marginLeft:-16,marginRight:-16,paddingLeft:16,paddingRight:16,
+              transition:"background .15s"}}
+            onMouseEnter={e=>{if(item.catId)e.currentTarget.style.background=isOver?"#FAF0F0":"#F9F6F1";}}
+            onMouseLeave={e=>{if(item.catId)e.currentTarget.style.background=isOver?"#FEF8F8":"transparent";}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:5}}>
-              <div>
-                <span style={{fontSize:14}}>{item.name}</span>
-                {item.fixed&&<span className="badge" style={{background:"#EDE7DC",color:"#7A6A52",marginLeft:7}}>фикс</span>}
-                {item.note&&<div style={{...M,fontSize:10,color:"#9A8A72",marginTop:1}}>{item.note}</div>}
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <span style={{fontSize:14,fontWeight:isOver?500:400}}>{item.name}</span>
+                {item.fixed&&<span className="badge" style={{background:"#EDE7DC",color:"#7A6A52"}}>фикс</span>}
+                {item.catId&&<span style={{...M,fontSize:9,color:"#C8B89A"}}>→</span>}
               </div>
               <div style={{textAlign:"right",display:"flex",flexDirection:"column",gap:2,alignItems:"flex-end"}}>
                 <div style={{...M,fontSize:13}}>{fmt(item.planned)}</div>
-                {item.actualSum!==item.planned&&item.actualSum>0&&<div style={{...M,fontSize:11,color:"#5A9AB8"}}>фактически {fmt(item.actualSum)}</div>}
-                {item.delta!==0&&item.delta!==undefined&&item.actualSum!==item.planned&&<span style={{fontFamily:"'DM Mono',monospace",fontSize:10,padding:"1px 7px",borderRadius:8,background:item.delta>0?"#FAE0D4":"#D4F0D4",color:item.delta>0?"#8A2A1A":"#1A6A1A",flexShrink:0}}>{item.delta>0?"🔴 +":"🟢 "}{fmt(Math.abs(item.delta))}</span>}
+                {hasData&&<div style={{...M,fontSize:11,color:"#5A9AB8"}}>подобрано {fmt(item.actualSum)}</div>}
+                {item.delta!==0&&item.delta!==undefined&&hasData&&(
+                  <span style={{...M,fontSize:10,padding:"1px 7px",borderRadius:8,
+                    background:isOver?"#FAE0D4":"#D4F0D4",
+                    color:isOver?"#8A2A1A":"#1A6A1A"}}>
+                    {isOver?"🔴 +":"🟢 "}{fmt(Math.abs(item.delta))}
+                  </span>
+                )}
               </div>
             </div>
-            <div style={{height:5,background:"#EDE7DC",borderRadius:3,overflow:"hidden"}}>
+            <div style={{height:5,background:"#EDE7DC",borderRadius:3,overflow:"hidden",position:"relative"}}>
               <div style={{display:"flex",height:"100%"}}>
                 {item.paid>0&&<div style={{width:`${pct(item.paid,item.planned||1)}%`,background:"#4A9A5A",transition:"width .4s"}}/>}
-                {item.selected>item.paid&&<div style={{width:`${pct(Math.min(item.selected,item.planned)-item.paid,item.planned||1)}%`,background:item.color,transition:"width .4s"}}/>}
+                {item.actualSum>0&&item.actualSum!==item.planned&&(
+                  <div style={{width:`${Math.min(100,pct(item.actualSum,item.planned||1))}%`,
+                    background:isOver?"#E8937A":item.color,transition:"width .4s",opacity:.7}}/>
+                )}
               </div>
+              {isOver&&<div style={{position:"absolute",right:0,top:0,height:"100%",
+                width:`${Math.min(50,pct(item.delta,item.planned||1))}%`,
+                background:"#E8937A",opacity:.4}}/>}
             </div>
           </div>
-        ))}
+        );})}
       </div>
 
       {/* 🎉 ILUSHA METER */}
@@ -1034,7 +1066,7 @@ function App(){
         const isCatOpen=openCats[cat.id];
         const cc=calcCat(cat);
         return(
-          <div key={cat.id} style={{...card,outline:dragSub&&dragSub.catId!==cat.id?"2px dashed #C8A97E":"none",transition:"outline .15s"}}
+          <div id={`cat-${cat.id}`} key={cat.id} style={{...card,outline:dragSub&&dragSub.catId!==cat.id?"2px dashed #C8A97E":"none",transition:"outline .15s"}}
             onDragOver={e=>{if(dragSub&&dragSub.catId!==cat.id){e.preventDefault();}}}
             onDrop={e=>{
               if(!dragSub||dragSub.catId===cat.id)return;
@@ -1139,7 +1171,14 @@ function App(){
                   const subSrc=sub.imageData||sub.imageUrl||null;
                   const st=STATUS_MAP[sub.status||"none"];
                   return(
+                    {(()=>{
+                      const subActual=actual(sub);
+                      const subOver=sub.planned>0&&subActual>sub.planned;
+                      return(
                     <div key={sub.id} className="sub-sep"
+                      style={{background:subOver?"#FFF5F5":"transparent",
+                        marginLeft:-14,marginRight:-14,paddingLeft:14,paddingRight:14,
+                        borderLeft:subOver?"3px solid #E8937A":"3px solid transparent"}}
                       onDragOver={e=>{e.preventDefault();}}
                       onDrop={()=>{
                         if(!dragSub||dragSub.catId!==cat.id||dragSub.subId===sub.id)return;
@@ -1628,6 +1667,8 @@ function App(){
                         </div>
                       )}
                     </div>
+                  );
+                })()}
                   );
                 })}
 
