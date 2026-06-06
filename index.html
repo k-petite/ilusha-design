@@ -774,7 +774,7 @@ function App(){
   <div style={{background:"#2C2416",color:"#F7F4EF",padding:"22px 18px 0"}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
       <div style={{...M,fontSize:9,letterSpacing:".18em",color:"#C8A97E"}}>БЮДЖЕТ РЕМОНТА</div>
-      <div style={{...M,fontSize:9,color:"#5A4A32",marginLeft:8}}>v3.5</div>
+      <div style={{...M,fontSize:9,color:"#5A4A32",marginLeft:8}}>v3.7</div>
       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
         {saveStatus==="saving"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#FDF5E4",color:"#8A6A12"}}>сохраняю…</span>}
         {saveStatus==="saved"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#E6F5EA",color:"#2A6A2A"}}>✓ сохранено</span>}
@@ -1432,7 +1432,14 @@ function App(){
                               <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10,flexWrap:"wrap"}}>
                                 <div style={{...M,fontSize:9,color:"#B8A878",flexShrink:0}}>ЗАПЛАНИРОВАНО</div>
                                 <input type="number" placeholder="0" value={sub.planned||""}
-                                  onChange={e=>updSub(cat.id,sub.id,{planned:Math.max(0,+e.target.value||0)})}
+                                  onChange={e=>{
+                                    const newVal=Math.max(0,+e.target.value||0);
+                                    // Guard: don't allow total to exceed 3.5M
+                                    const otherPlanned=cats.flatMap(c=>c.subs).filter(s=>s.id!==sub.id).reduce((sum,s)=>sum+toNum(s.planned),0);
+                                    const newTotal=otherPlanned+newVal+ROUGH_PLANNED;
+                                    if(newTotal>TOTAL_BUDGET) return; // hard ceiling 3.5M
+                                    updSub(cat.id,sub.id,{planned:newVal});
+                                  }}
                                   style={{width:110}}/>
                                 {isSelected(sub)&&(()=>{
                                   const a=actual(sub);
@@ -1512,21 +1519,22 @@ function App(){
                               const updateAlt=patch=>{
                                 const newAlts=(sub.alts||[]).map(a=>a.id===alt.id?{...a,...patch}:a);
                                 const updatedSub={...sub,alts:newAlts};
-                                // Auto-add savings to reserve when price drops below plan
-                                // But do NOT auto-deduct from reserve when price exceeds plan
+                                // Auto-add savings to reserve ONLY when:
+                                // 1. This is the active alt
+                                // 2. New price is strictly lower than old price (savings > 0)
+                                // 3. New price is at or below plan
                                 if(alt.id===sub.activeAltId && (patch.unitPrice!==undefined||patch.qty!==undefined||patch.paid!==undefined)){
                                   const oldActual=actual(sub);
                                   const newActual=actual(updatedSub);
-                                  const savings=oldActual-newActual; // positive=cheaper, negative=more expensive
-                                  // Only auto-update reserve if new price is BELOW plan (savings)
-                                  if(savings!==0 && newActual<=toNum(sub.planned)){
+                                  const savings=oldActual-newActual;
+                                  if(savings>0 && newActual<=toNum(sub.planned) && oldActual>0){
                                     setCats(prev=>prev.map(c=>{
                                       if(c.id!==cat.id)return c;
                                       const resSub=findReserveSub(c);
                                       if(!resSub)return {...c,subs:c.subs.map(s=>s.id===sub.id?updatedSub:s)};
                                       return {...c,subs:c.subs.map(s=>{
                                         if(s.id===sub.id) return updatedSub;
-                                        if(s.id===resSub.id) return {...s,planned:Math.max(0,toNum(s.planned)+savings)};
+                                        if(s.id===resSub.id) return {...s,planned:toNum(s.planned)+savings};
                                         return s;
                                       })};
                                     }));
