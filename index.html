@@ -699,7 +699,7 @@ function App(){
     *{box-sizing:border-box;}
 
     /* ── DESKTOP BASE (zoom effect via font-size) ── */
-    html{font-size:17px;}
+    html{font-size:20px;}
     body{font-size:1rem;}
 
     input[type=text],input[type=number],textarea,select{
@@ -745,40 +745,52 @@ function App(){
       /* Header: 2 cols instead of 4 */
       .hdr-grid{grid-template-columns:1fr 1fr !important;}
 
-      /* Alt card: stack vertically */
-      .alt-card-row{flex-direction:column !important;}
-      .alt-card-img{width:100% !important;height:160px !important;border-right:none !important;border-bottom:1px solid #EDE7DC !important;}
-      .alt-card-content{padding:10px !important;}
-
-      /* Alt fields: wrap */
-      .alt-fields{flex-wrap:wrap !important;gap:6px !important;}
-      .alt-fields label{flex:1 1 45% !important;min-width:0 !important;}
-
-      /* Sub header: tighter */
-      .sub-sep{padding:10px 0;}
-
-      /* Thumbnail smaller on mobile */
-      .sub-thumb{width:40px !important;height:40px !important;}
-
       /* Cat totals: 2 cols */
       .cat-totals{grid-template-columns:1fr 1fr !important;}
 
-      /* Filter bar: wrap tightly */
-      .filter-pills{gap:4px !important;}
-      .filter-pills button{padding:3px 7px !important;font-size:10px !important;}
+      /* Sub header: tighter, NO left indent on mobile */
+      .sub-sep{padding:8px 0;}
+      .mobile-no-indent{margin-left:0 !important;padding-left:8px !important;}
 
-      /* Variant card fields row: wrap */
-      .var-fields{flex-wrap:wrap !important;overflow-x:hidden !important;}
+      /* Thumbnail smaller on mobile */
+      .sub-thumb{width:36px !important;height:36px !important;}
+
+      /* Delete/duplicate buttons: hide text, keep icon only, prevent overflow */
+      .icon-btn{padding:2px 3px !important;font-size:12px !important;}
+      .ghost-btn{padding:3px 7px !important;font-size:9px !important;}
+
+      /* Sub header row: clip to viewport */
+      .sub-header-row{flex-wrap:wrap !important;gap:4px !important;}
+      .sub-actions{flex-wrap:wrap !important;gap:3px !important;max-width:100%;}
+
+      /* Badge overflow: wrap */
+      .badge{font-size:9px !important;padding:1px 5px !important;}
+
+      /* Alt card: stack photo top */
+      .alt-card-row{flex-direction:column !important;}
+      .alt-card-img{width:100% !important;height:120px !important;border-right:none !important;border-bottom:1px solid #EDE7DC !important;}
+      .alt-card-content{padding:8px !important;}
+
+      /* Fields in alt: wrap */
+      .alt-fields{flex-wrap:wrap !important;overflow-x:hidden !important;}
 
       /* Content area padding */
-      .content-pad{padding:10px 10px 48px !important;}
+      .content-pad{padding:8px 8px 48px !important;}
 
       /* Modal full width */
-      .modal{padding:16px;border-radius:8px;}
+      .modal{padding:14px;border-radius:8px;max-width:100% !important;}
 
       /* Tabs scrollable */
       .tabs-row{overflow-x:auto;-webkit-overflow-scrolling:touch;}
       .tab{padding:8px 10px;font-size:10px;}
+
+      /* Filter pills */
+      .filter-pills{gap:3px !important;}
+      .filter-pills button{padding:2px 6px !important;font-size:9px !important;}
+
+      /* Prevent any horizontal overflow */
+      .content-pad *{max-width:100%;word-break:break-word;}
+      input,textarea,select{max-width:100% !important;}
     }
   `}</style>
 
@@ -786,7 +798,7 @@ function App(){
   <div style={{background:"#2C2416",color:"#F7F4EF",padding:"22px 18px 0"}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
       <div style={{...M,fontSize:9,letterSpacing:".18em",color:"#C8A97E"}}>БЮДЖЕТ РЕМОНТА</div>
-      <div style={{...M,fontSize:9,color:"#5A4A32",marginLeft:8}}>v3.8</div>
+      <div style={{...M,fontSize:9,color:"#5A4A32",marginLeft:8}}>v3.9</div>
       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
         {saveStatus==="saving"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#FDF5E4",color:"#8A6A12"}}>сохраняю…</span>}
         {saveStatus==="saved"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#E6F5EA",color:"#2A6A2A"}}>✓ сохранено</span>}
@@ -1114,7 +1126,7 @@ function App(){
       <div className="no-print" style={{background:"white",borderRadius:8,padding:"12px 14px",marginBottom:12,boxShadow:"0 1px 5px rgba(44,36,22,.07)"}}>
         <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:10}}>
           <span style={{...M,fontSize:10,color:"#9A8A72",flexShrink:0}}>ПОМЕЩЕНИЕ:</span>
-          <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+          <div className="filter-pills" style={{display:"flex",flexWrap:"wrap",gap:4}}>
             {[{id:"all",label:"Все",icon:""},...ROOMS].map(r=>(
               <button key={r.id} onClick={()=>setFilterRoom(r.id)}
                 style={{background:filterRoom===r.id?"#2C2416":"none",
@@ -1304,7 +1316,7 @@ function App(){
                         setDragSub(null);
                       }}>
                       {/* Sub header */}
-                      <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
+                      <div className="sub-header-row" style={{display:"flex",alignItems:"flex-start",gap:8}}>
                         {!IS_VIEWER&&<span title="Перетащи чтобы изменить порядок"
                           draggable={true}
                           onDragStart={e=>{e.stopPropagation();setDragSub({catId:cat.id,subId:sub.id});}}
@@ -1342,7 +1354,7 @@ function App(){
                                     borderBottom:"1px solid #C8A97E",background:"transparent",padding:"0 0 2px",flex:1,color:"#2C2416"}}/>
                               : <span className="sub-name" style={{lineHeight:1.3}}>{sub.name}</span>
                             }
-                            <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0,flexWrap:"wrap"}}>
+                            <div className="sub-actions" style={{display:"flex",gap:6,alignItems:"center",flexShrink:0,flexWrap:"wrap"}}>
                               <StatusPill value={sub.status||"none"} onChange={v=>updSub(cat.id,sub.id,{status:v})}/>
                               {/* View status badge */}
                               {sub.viewStatus==="viewed"
@@ -1438,7 +1450,7 @@ function App(){
 
                       {/* Expanded sub — header only, variants are the main content */}
                       {isSubOpen&&(
-                        <div style={{marginTop:10,marginLeft:80,borderLeft:"2px solid #EDE7DC",paddingLeft:12}}>
+                        <div className="mobile-no-indent" style={{marginTop:10,marginLeft:80,borderLeft:"2px solid #EDE7DC",paddingLeft:12}}>
 
                           {/* ── SUB META (plan, comment, rooms, view status) ── */}
                           <div style={{background:"#FDFAF6",border:"1px solid #EDE7DC",borderRadius:6,
