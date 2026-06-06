@@ -572,33 +572,99 @@ function App(){
   const card={background:"white",borderRadius:8,padding:"14px 16px",marginBottom:12,boxShadow:"0 1px 5px rgba(44,36,22,.07)"};
 
   return(
-  <div style={{fontFamily:"'Cormorant Garamond',Georgia,serif",background:"#F7F4EF",minHeight:"100vh",color:"#2C2416",zoom:1.4}}>
+  <div style={{fontFamily:"'Cormorant Garamond',Georgia,serif",background:"#F7F4EF",minHeight:"100vh",color:"#2C2416"}}>
   <style>{`
     *{box-sizing:border-box;}
-    input[type=text],input[type=number],textarea,select{font-family:'DM Mono',monospace;font-size:11px;color:#2C2416;background:#FDFAF6;border:1px solid #DDD5C4;border-radius:3px;padding:4px 7px;}
+
+    /* ── DESKTOP BASE (zoom effect via font-size) ── */
+    html{font-size:16px;}
+    body{font-size:1rem;}
+
+    input[type=text],input[type=number],textarea,select{
+      font-family:'DM Mono',monospace;font-size:13px;color:#2C2416;
+      background:#FDFAF6;border:1px solid #DDD5C4;border-radius:3px;padding:5px 8px;
+    }
     input:focus,textarea:focus,select:focus{outline:none;border-color:#C8A97E;background:white;}
     input[type=number]{width:100px;text-align:right;}
-    .tab{background:none;border:none;padding:9px 13px;cursor:pointer;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.09em;color:#9A8A72;border-bottom:2px solid transparent;transition:all .2s;white-space:nowrap;}
+
+    .tab{background:none;border:none;padding:10px 16px;cursor:pointer;
+      font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.09em;
+      color:#9A8A72;border-bottom:2px solid transparent;transition:all .2s;white-space:nowrap;}
     .tab.on{color:#F7F4EF;border-bottom-color:#C8A97E;}
     .tab:hover:not(.on){color:#C8B89A;}
-    .exp-btn{background:none;border:none;cursor:pointer;font-family:'DM Mono',monospace;font-size:10px;color:#C8A97E;display:flex;align-items:center;gap:5px;padding:0;}
+
+    .exp-btn{background:none;border:none;cursor:pointer;font-family:'DM Mono',monospace;
+      font-size:11px;color:#C8A97E;display:flex;align-items:center;gap:5px;padding:0;}
     .exp-btn:hover{opacity:.7;}
+
+    /* Bold category and sub names */
+    .cat-name{font-weight:600;font-size:17px;}
+    .sub-name{font-weight:500;font-size:15px;}
+
     .sub-sep{border-bottom:1px solid #F5F0E8;padding:14px 0;}
     .sub-sep:last-child{border-bottom:none;}
-    .ghost-btn{background:none;border:1px dashed #C8B89A;color:#9A8A72;padding:4px 10px;border-radius:4px;cursor:pointer;font-family:'DM Mono',monospace;font-size:10px;}
+
+    .ghost-btn{background:none;border:1px dashed #C8B89A;color:#9A8A72;padding:5px 12px;
+      border-radius:4px;cursor:pointer;font-family:'DM Mono',monospace;font-size:11px;}
     .ghost-btn:hover{border-color:#C8A97E;color:#C8A97E;}
-    .icon-btn{background:none;border:none;cursor:pointer;font-size:14px;padding:2px 4px;border-radius:3px;}
+
+    .icon-btn{background:none;border:none;cursor:pointer;font-size:15px;padding:3px 5px;border-radius:3px;}
     .icon-btn:hover{background:#F0EAE0;}
-    .overlay{position:fixed;inset:0;background:rgba(44,36,22,.5);z-index:100;display:flex;align-items:center;justify-content:center;padding:16px;}
+
+    .overlay{position:fixed;inset:0;background:rgba(44,36,22,.5);z-index:100;
+      display:flex;align-items:center;justify-content:center;padding:16px;}
     .modal{background:white;border-radius:10px;padding:22px;width:100%;max-width:440px;max-height:90vh;overflow-y:auto;}
-    .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-family:'DM Mono',monospace;font-size:10px;}
+    .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-family:'DM Mono',monospace;font-size:11px;}
+
+    /* ── MOBILE ── */
+    @media(max-width:640px){
+      html{font-size:14px;}
+
+      /* Header: 2 cols instead of 4 */
+      .hdr-grid{grid-template-columns:1fr 1fr !important;}
+
+      /* Alt card: stack vertically */
+      .alt-card-row{flex-direction:column !important;}
+      .alt-card-img{width:100% !important;height:160px !important;border-right:none !important;border-bottom:1px solid #EDE7DC !important;}
+      .alt-card-content{padding:10px !important;}
+
+      /* Alt fields: wrap */
+      .alt-fields{flex-wrap:wrap !important;gap:6px !important;}
+      .alt-fields label{flex:1 1 45% !important;min-width:0 !important;}
+
+      /* Sub header: tighter */
+      .sub-sep{padding:10px 0;}
+
+      /* Thumbnail smaller on mobile */
+      .sub-thumb{width:40px !important;height:40px !important;}
+
+      /* Cat totals: 2 cols */
+      .cat-totals{grid-template-columns:1fr 1fr !important;}
+
+      /* Filter bar: wrap tightly */
+      .filter-pills{gap:4px !important;}
+      .filter-pills button{padding:3px 7px !important;font-size:10px !important;}
+
+      /* Variant card fields row: wrap */
+      .var-fields{flex-wrap:wrap !important;overflow-x:hidden !important;}
+
+      /* Content area padding */
+      .content-pad{padding:10px 10px 48px !important;}
+
+      /* Modal full width */
+      .modal{padding:16px;border-radius:8px;}
+
+      /* Tabs scrollable */
+      .tabs-row{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+      .tab{padding:8px 10px;font-size:10px;}
+    }
   `}</style>
 
   {/* ── HEADER ── */}
   <div style={{background:"#2C2416",color:"#F7F4EF",padding:"22px 18px 0"}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
       <div style={{...M,fontSize:9,letterSpacing:".18em",color:"#C8A97E"}}>БЮДЖЕТ РЕМОНТА</div>
-      <div style={{...M,fontSize:9,color:"#5A4A32",marginLeft:8}}>v2.8</div>
+      <div style={{...M,fontSize:9,color:"#5A4A32",marginLeft:8}}>v2.9</div>
       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
         {saveStatus==="saving"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#FDF5E4",color:"#8A6A12"}}>сохраняю…</span>}
         {saveStatus==="saved"&&<span style={{...M,fontSize:10,padding:"3px 10px",borderRadius:10,background:"#E6F5EA",color:"#2A6A2A"}}>✓ сохранено</span>}
@@ -627,7 +693,7 @@ function App(){
 
       return(<div>
         {/* 4 main cards */}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,marginBottom:12}}>
+        <div className="hdr-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,marginBottom:12}}>
 
           {/* 1. Бюджет */}
           <div>
@@ -706,7 +772,7 @@ function App(){
       </div>);
     })()}
 
-    <div style={{display:"flex",borderTop:"1px solid #3C3426",marginTop:10,overflowX:"auto"}}>
+    <div className="tabs-row" style={{display:"flex",borderTop:"1px solid #3C3426",marginTop:10,overflowX:"auto"}}>
       {[["overview","ОБЗОР"],["rough","ЧЕРНОВЫЕ"],["flexible","КАТЕГОРИИ"],["chart","ДИАГРАММА"]].map(([id,lbl])=>(
         <button key={id} className={`tab ${tab===id?"on":""}`} onClick={()=>setTab(id)}>{lbl}</button>
       ))}
@@ -714,7 +780,7 @@ function App(){
   </div>
 
   {/* ── CONTENT ── */}
-  <div style={{padding:"14px 14px 48px"}}>
+  <div className="content-pad" style={{padding:"14px 14px 48px"}}>
 
   {/* OVERVIEW */}
   {tab==="overview"&&(
@@ -1119,7 +1185,7 @@ function App(){
                   </div>
                 </> : <>
                   <span style={{fontSize:16}}>{cat.icon}</span>
-                  <span style={{fontSize:15,color:"#2C2416",fontFamily:"'Cormorant Garamond',serif"}}>{cat.name}</span>
+                  <span className="cat-name" style={{color:"#2C2416",fontFamily:"'Cormorant Garamond',serif"}}>{cat.name}</span>
                 </>}
               </div>
               <div style={{display:"flex",alignItems:"center",gap:6}}>
@@ -1147,7 +1213,7 @@ function App(){
                 </span>
               </div>
             )}
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6,marginBottom:isCatOpen?12:0}}>
+            <div className="cat-totals" style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6,marginBottom:isCatOpen?12:0}}>
               {[
                 {l:"Запланировано", v:cc.planned,    bg:"#F5F0E4", c:"#7A6A52"},
                 {l:"Фактически",   v:cc.actualSum,  bg:"#E6F1F8", c:"#5A9AB8"},
@@ -1210,7 +1276,7 @@ function App(){
                           const thumbUrl = (activeAlt&&activeAlt.url) || sub.url;
                           return thumbSrc
                             ? <img src={thumbSrc} alt=""
-                                style={{width:52,height:52,objectFit:"contain",background:"#F9F6F1",
+                                className="sub-thumb" style={{width:52,height:52,objectFit:"contain",background:"#F9F6F1",
                                   borderRadius:6,border:sub.activeAltId?"2px solid #4A9A5A":"1px solid #EDE7DC",
                                   flexShrink:0,cursor:thumbUrl?"pointer":"default"}}
                                 onClick={()=>thumbUrl&&window.open(thumbUrl,"_blank")}
@@ -1229,7 +1295,7 @@ function App(){
                               ? <input type="text" value={sub.name} onChange={e=>updSub(cat.id,sub.id,{name:e.target.value})}
                                   style={{fontSize:14,fontFamily:"'Cormorant Garamond',serif",border:"none",
                                     borderBottom:"1px solid #C8A97E",background:"transparent",padding:"0 0 2px",flex:1,color:"#2C2416"}}/>
-                              : <span style={{fontSize:14,lineHeight:1.3}}>{sub.name}</span>
+                              : <span className="sub-name" style={{lineHeight:1.3}}>{sub.name}</span>
                             }
                             <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0,flexWrap:"wrap"}}>
                               <StatusPill value={sub.status||"none"} onChange={v=>updSub(cat.id,sub.id,{status:v})}/>
@@ -1279,13 +1345,13 @@ function App(){
                           {/* Compact amounts when collapsed — from active alt or planned */}
                           {!isSubOpen&&(()=>{
                             const activeAlt = sub.activeAltId&&(sub.alts||[]).find(a=>a.id===sub.activeAltId);
-                            const showPrice = activeAlt?.price || sub.selected || null;
-                            const showPaid  = activeAlt?.paid  || sub.paid    || null;
-                            return(sub.planned>0||showPrice)&&(
+                            const showPrice = activeAlt ? altPrice(activeAlt) : (sub.selected || 0);
+                            const showPaid  = activeAlt ? (toNum(activeAlt.paid)||0) : (sub.paid||0);
+                            return(sub.planned>0||showPrice>0)&&(
                               <div style={{display:"flex",gap:10,marginTop:4,...M,fontSize:11,color:"#7A6A52",flexWrap:"wrap"}}>
                                 {sub.planned>0&&<span>план: {fmt(sub.planned)}</span>}
-                                {showPrice&&<span style={{color:"#5A9AB8"}}>подобрано: {Number(showPrice).toLocaleString("ru-RU")} ₽</span>}
-                                {showPaid&&<span style={{color:"#4A9A5A"}}>оплачено: {Number(showPaid).toLocaleString("ru-RU")} ₽</span>}
+                                {showPrice>0&&<span style={{color:"#5A9AB8"}}>подобрано: {Number(showPrice).toLocaleString("ru-RU")} ₽</span>}
+                                {showPaid>0&&<span style={{color:"#4A9A5A"}}>оплачено: {Number(showPaid).toLocaleString("ru-RU")} ₽</span>}
                               </div>
                             );
                           })()}
@@ -1303,7 +1369,7 @@ function App(){
 
                       {/* Expanded sub — header only, variants are the main content */}
                       {isSubOpen&&(
-                        <div style={{marginTop:10,paddingLeft:64,borderLeft:"2px solid #EDE7DC",marginLeft:8}}>
+                        <div style={{marginTop:10,paddingLeft:16,borderLeft:"2px solid #EDE7DC"}}>
 
                           {/* ── SUB META (plan, comment, rooms, view status) ── */}
                           <div style={{background:"#FDFAF6",border:"1px solid #EDE7DC",borderRadius:6,
@@ -1433,10 +1499,10 @@ function App(){
                                     transition:"border-color .2s,background .2s",
                                     opacity:dragAlt&&dragAlt.altId===alt.id?.5:1
                                   }}>
-                                  <div style={{display:"flex",alignItems:"flex-start"}}>
+                                  <div className="alt-card-row" style={{display:"flex",alignItems:"flex-start"}}>
 
                                     {/* Left: image block */}
-                                    <div style={{width:80,minHeight:80,flexShrink:0,
+                                    <div className="alt-card-img" style={{width:80,minHeight:80,flexShrink:0,
                                       background:"#F5F2EE",display:"flex",alignItems:"center",
                                       justifyContent:"center",cursor:alt.url?"pointer":"default",
                                       position:"relative",borderRight:"1px solid #EDE7DC"}}
@@ -1452,7 +1518,7 @@ function App(){
                                     </div>
 
                                     {/* Right: content */}
-                                    <div style={{flex:1,minWidth:0,padding:"10px 12px"}}>
+                                    <div className="alt-card-content" style={{flex:1,minWidth:0,padding:"10px 12px"}}>
 
                                       {/* Row 1: name + buttons */}
                                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:6}}>
